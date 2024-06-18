@@ -1,1 +1,7 @@
 bittensor
+openai
+openapi-schema-pydantic
+torch
+pandas
+numpy
+pydantic

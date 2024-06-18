@@ -17,16 +17,25 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
+import os
 import time
 import typing
 import bittensor as bt
 
+from openai import OpenAI
+import json
+import bittensor
+import asyncio
+from dotenv import load_dotenv
+
 # Bittensor Miner Template:
-import template
+import scorepredict
+from scorepredict.protocol import Prediction
 
 # import base miner class which takes care of most of the boilerplate
-from template.base.miner import BaseMinerNeuron
+from scorepredict.base.miner import BaseMinerNeuron
 
+load_dotenv()
 
 class Miner(BaseMinerNeuron):
     """
@@ -42,11 +51,16 @@ class Miner(BaseMinerNeuron):
 
         # TODO(developer): Anything specific to your use case you can do here
 
-    async def forward(
-        self, synapse: template.protocol.Dummy
-    ) -> template.protocol.Dummy:
+    def save_state(self):
         """
-        Processes the incoming 'Dummy' synapse by performing a predefined operation on the input data.
+        Saves the state of the neuron. Override this method to implement saving logic.
+        """
+        # Implement saving logic here, or pass if no saving is needed.
+        pass
+
+    async def forward(self, synapse: scorepredict.protocol.Prediction) -> scorepredict.protocol.Prediction:
+        """
+        Processes the incoming 'Prediction' synapse by performing a predefined operation on the input data.
         This method should be replaced with actual logic relevant to the miner's purpose.
 
         Args:
@@ -57,13 +71,82 @@ class Miner(BaseMinerNeuron):
 
         The 'forward' function is a placeholder and should be overridden with logic that is appropriate for
         the miner's intended operation. This method demonstrates a basic transformation of input data.
-        """
-        # TODO(developer): Replace with actual implementation logic.
-        synapse.dummy_output = synapse.dummy_input * 2
-        return synapse
+        """ 
+
+        time.sleep(1)
+
+        # Fetch the validators openai api key from config - 
+        # use --openai_key xxxxxx to set the key 
+        #api_key = self.config.openai_key
+        api_key = os.getenv('OPENAI_API_KEY')
+
+        if not api_key:
+            bt.logging.warning("No OpenAI key found - add it as a parameter when running --openai_key")
+            # Randomly pick a winner as a fallback
+            import random
+            teams = [synapse.home_team, synapse.away_team]
+            random_winner = random.choice(teams)
+            synapse.predicted_winner = random_winner
+            synapse.predicted_score_home = None
+            synapse.predicted_score_away = None
+
+            bt.logging.info(f"👈 Random prediction {synapse}")
+            return synapse
+
+
+        try:
+            # Construct the prompt for OpenAI GPT model
+            prompt = f"""
+            Predict the outcome of the football match between {synapse.home_team} and {synapse.away_team} on {synapse.match_date}. Please provide the prediction in the following JSON format:
+            {{
+                "match_id": {synapse.match_id},
+                "winner": "team name",
+                "duration": "REGULAR",
+                "fullTime": {{
+                    "home": "number of goals by home team",
+                    "away": "number of goals by away team"
+                }}
+            }}
+            """
+
+            bt.logging.info(f"Prediction Prompt: {prompt}") 
+            
+            # Asynchronously fetch prediction using OpenAI GPT
+            client = OpenAI(api_key=api_key)
+
+            response = client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            
+            bt.logging.info(f"Prediction Response: {response.choices[0].message.content}")
+            
+            # Extract the prediction from the response
+            prediction_json = response.choices[0].message.content
+            prediction = json.loads(prediction_json) if prediction_json else {}
+            
+            # Update the synapse with the predicted values
+            synapse.predicted_winner = prediction.get('winner')
+            synapse.predicted_score_home = prediction['fullTime']['home']
+            synapse.predicted_score_away = prediction['fullTime']['away']
+            
+            bt.logging.info(f"Returned Synapse: {synapse}")
+            return synapse
+
+        except Exception as e:
+            bt.logging.error(f"An error occurred: {e}")
+            synapse.predicted_winner = None
+            synapse.predicted_score_home = None
+            synapse.predicted_score_away = None
+            return synapse
+        
 
     async def blacklist(
-        self, synapse: template.protocol.Dummy
+        self, synapse: scorepredict.protocol.Prediction
     ) -> typing.Tuple[bool, str]:
         """
         Determines whether an incoming request should be blacklisted and thus ignored. Your implementation should
@@ -94,11 +177,6 @@ class Miner(BaseMinerNeuron):
 
         Otherwise, allow the request to be processed further.
         """
-
-        if synapse.dendrite is None or synapse.dendrite.hotkey is None:
-            bt.logging.warning("Received a request without a dendrite or hotkey.")
-            return True, "Missing dendrite or hotkey"
-
         # TODO(developer): Define how miners should blacklist requests.
         uid = self.metagraph.hotkeys.index(synapse.dendrite.hotkey)
         if (
@@ -124,7 +202,7 @@ class Miner(BaseMinerNeuron):
         )
         return False, "Hotkey recognized!"
 
-    async def priority(self, synapse: template.protocol.Dummy) -> float:
+    async def priority(self, synapse: scorepredict.protocol.Prediction) -> float:
         """
         The priority function determines the order in which requests are handled. More valuable or higher-priority
         requests are processed before others. You should design your own priority mechanism with care.
@@ -144,26 +222,38 @@ class Miner(BaseMinerNeuron):
         Example priority logic:
         - A higher stake results in a higher priority value.
         """
-        if synapse.dendrite is None or synapse.dendrite.hotkey is None:
-            bt.logging.warning("Received a request without a dendrite or hotkey.")
-            return 0.0
-        
         # TODO(developer): Define how miners should prioritize requests.
         caller_uid = self.metagraph.hotkeys.index(
             synapse.dendrite.hotkey
         )  # Get the caller index.
-        priority = float(
+        prirority = float(
             self.metagraph.S[caller_uid]
         )  # Return the stake as the priority.
         bt.logging.trace(
-            f"Prioritizing {synapse.dendrite.hotkey} with value: {priority}"
+            f"Prioritizing {synapse.dendrite.hotkey} with value: ", prirority
         )
         return prirority
 
+    def print_info(self):
+        metagraph = self.metagraph
+        self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
+
+        log = (
+            "Miner | "
+            f"Step:{self.step} | "
+            f"UID:{self.uid} | "
+            f"Block:{self.block} | "
+            f"Stake:{metagraph.S[self.uid]} | "
+            f"Trust:{metagraph.T[self.uid]} | "
+            f"Incentive:{metagraph.I[self.uid]} | "
+            f"Emission:{metagraph.E[self.uid]}"
+        )
+        bt.logging.info(log)
 
 # This is the main function, which runs the miner.
 if __name__ == "__main__":
     with Miner() as miner:
         while True:
-            bt.logging.info(f"Miner running... {time.time()}")
-            time.sleep(5)
+            bt.logging.info("Miner running...", time.time())
+            miner.print_info()
+            time.sleep(10)

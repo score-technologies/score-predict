@@ -163,3 +163,7 @@ testing/
 
 # Editors
 .vscode/settings.json
+
+.commands
+predictions_log.txt
+fixreqs.py
