@@ -46,14 +46,14 @@ The below diagram shows simply the flow for each cycle.
 ### Prerequisites
 
 - Python 3.8+
-- Bittensor library
+- Bittensor 
 - OpenAI API key (for miners)
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/score/score-predict.git
+git clone https://github.com/score-protocol/score-predict.git
 cd score-predict
 ```
 
@@ -62,11 +62,14 @@ cd score-predict
 pip install -r requirements.txt
 ```
 
-3. Set up your environment variables:
+3. Set up:
 
 ```bash
 export PYTHONPATH="/path/to/score-predict:$PYTHONPATH"
 ```
+
+### Testnet
+Currently live on testnet subnet 180
 
 ## Mining
 
@@ -77,12 +80,12 @@ Miners are responsible for generating predictions for upcoming football matches.
 To run a miner, use the following command:
 
 ```bash
-python neurons/miner.py --netuid 1 --logging.debug --logging.trace --subtensor.network test --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME
+python neurons/miner.py --netuid 180 --logging.debug --logging.trace --subtensor.network test --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME
 ```
 
 or via pm2
 ```bash
-pm2 start ./neurons/miner.py --interpreter python3 -- --netuid 1 --logging.debug --logging.trace --subtensor.chain_endpoint ws://127.0.0.1:9946 --wallet.name 3miner --wallet.hotkey default
+pm2 start ./neurons/miner.py --interpreter python3 -- --netuid 180 --logging.debug --logging.trace --subtensor.network test --wallet.name miner --wallet.hotkey default
 ```
 
 ### Miner Code Overview

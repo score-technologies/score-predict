@@ -273,7 +273,7 @@ def get_matches(self, date_str, status: str = None):
         match_time = datetime.datetime.fromisoformat(match['utcDate'].rstrip('Z'))
         time_difference = (match_time - current_utc).total_seconds() / 60  # Convert seconds to minutes
 
-        if 1020 <= time_difference <= 1300:
+        if 60 <= time_difference <= 75:
             upcoming_matches[match['id']] = match
 
     bt.logging.info(f"Fetched {len(upcoming_matches)} upcoming matches between 60 and 75 minutes before kickoff.")
