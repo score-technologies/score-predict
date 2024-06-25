@@ -28,7 +28,7 @@ import bittensor
 import asyncio
 from dotenv import load_dotenv
 
-# Bittensor Miner Template:
+# Bittensor Miner Template:``
 import scorepredict
 from scorepredict.protocol import Prediction
 

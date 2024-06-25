@@ -18,7 +18,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 import requests
-import torch
+#import torch
 from typing import Tuple, List
 import bittensor as bt
 import time
