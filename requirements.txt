@@ -1,4 +1,4 @@
-bittensor
+bittensor==7.2.0
 openai
 openapi-schema-pydantic
 torch

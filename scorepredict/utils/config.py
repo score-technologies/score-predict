@@ -255,6 +255,13 @@ def add_validator_args(cls, parser):
         help="Whether to use the mock test api or not.",
         default=True,
     )
+    
+    parser.add_argument(
+        "--simulate_time",
+        action="store_true",
+        help="Whether to simulate time or not.",
+        default=False,
+    )    
 
 
 def config(cls):

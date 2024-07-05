@@ -17,34 +17,33 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import requests
-#import torch
-from typing import Tuple, List
 import bittensor as bt
-import time
-from datetime import datetime, timedelta
-import collections
 import numpy as np
+import sqlite3
+from datetime import datetime, timedelta
+from typing import Tuple, List
 
-#from scorepredict.validator.forward import MinerSubmissions
 from scorepredict.utils.utils import get_matches
+from scorepredict.utils.utils import get_current_time
 
-# Initialize the start date for fetching matches
-current_fetch_date = datetime(2023, 4, 1)
+def calculate_time_bonus(prediction_time, match_time):
+    """Calculate bonus based on how early the prediction was made"""
+    hours_before = (match_time - prediction_time).total_seconds() / 3600
+    if hours_before >= 6:
+        return 1.0  # Maximum bonus
+    elif hours_before <= 1:
+        return 0.0  # No bonus
+    else:
+        return (hours_before - 1) / 5  # Linear scale between 1 and 6 hours
 
-def reward(submission, match_data):
+def reward(prediction, match_data, prediction_time):
     """
-    Reward the miner response to the match prediction request. This method returns a reward
-    value for the miner, which is used to update the miner's score.
-
-    Returns:
-    - float: The reward value for the miner.
+    Reward the miner response to the match prediction request.
     """
     actual_winner_code = match_data['score']['winner']
     home_team_name = match_data['homeTeam']['name']
     away_team_name = match_data['awayTeam']['name']
 
-    # Map actual_winner_code to the team name
     if actual_winner_code == "HOME_TEAM":
         actual_winner = home_team_name
     elif actual_winner_code == "AWAY_TEAM":
@@ -52,21 +51,26 @@ def reward(submission, match_data):
     else:
         actual_winner = "DRAW"
 
-    # Extract the predicted winner from the submission directly
-    predicted_winner = submission['predicted_winner']
+    base_reward = 3.0 if prediction == actual_winner else 0.0
+    
+    match_time = datetime.fromisoformat(match_data['utcDate'].rstrip('Z'))
+    #time_bonus = calculate_time_bonus(prediction_time, match_time)
+    
+    #total_reward = base_reward * (1 + time_bonus)
+    total_reward = base_reward
 
-    # Check if the predicted winner is correct
-    if predicted_winner == actual_winner:
-        return 3.0  # Assign 3 points for correct winner prediction
+    return total_reward
+
+def get_rewards(self) -> Tuple[np.ndarray, List[int]]:
+    # We check for games completed 24 hours ago if simulating time for testing, otherwise just checks for games completed just now
+    if self.config.simulate_time:
+        target_date = get_current_time(self) - timedelta(hours=24)
     else:
-        return 0.0  # Assign 0 points for incorrect winner prediction
+        target_date = get_current_time(self)
 
-def get_rewards(self, submissions: dict) -> Tuple[np.ndarray, List[str]]:
-    target_date = datetime.utcnow().strftime('%Y-%m-%d')
     finished_matches = get_matches(self, date_str=target_date, status='FINISHED')
 
-    bt.logging.info(f"Finished matches: {finished_matches}")
-    bt.logging.info(f"Submissions: {submissions}")
+    #bt.logging.info(f"Finished matches: {finished_matches}")
 
     if finished_matches is None:
         bt.logging.info("No finished matches found. Returning empty reward array and miner UIDs.")
@@ -74,23 +78,30 @@ def get_rewards(self, submissions: dict) -> Tuple[np.ndarray, List[str]]:
 
     rewards = []
     rewarded_miner_uids = []
-    rewarded_submissions = []  # List to store rewarded submissions
+
+    conn = sqlite3.connect('predictions.db')
+    c = conn.cursor()
 
     for match_id, match in finished_matches.items():
-        for (miner_uid, submission_match_id), submission_data in submissions.items():
-            if submission_match_id == match_id:
-                submission = submission_data['prediction']
-                reward_value = reward(submission, match)
-                rewards.append(reward_value)
-                rewarded_miner_uids.append(miner_uid)
-                rewarded_submissions.append((miner_uid, submission_match_id))  # Add rewarded submission to the list
-                bt.logging.info(f"Reward for miner {miner_uid} for match {match_id}: {reward_value}")
-                with open("predictions_log.txt", "a") as log_file:
-                    log_file.write(f"Reward for miner {miner_uid} for match {match_id}: {reward_value}\n")
+        c.execute("SELECT miner_uid, prediction, timestamp, reward FROM predictions WHERE match_id=?", (match_id,))
+        predictions = c.fetchall()
+        
+        for miner_uid, prediction, timestamp, reward_value_from_db in predictions:
+            if reward_value_from_db is not None:
+                bt.logging.info(f"Reward already processed for miner {miner_uid} for match {match_id}. Skipping.")
+                continue
 
-    # Remove rewarded submissions from the submissions dictionary
-    for miner_uid, submission_match_id in rewarded_submissions:
-        del submissions[(miner_uid, submission_match_id)]
+            prediction_time = datetime.fromisoformat(timestamp)
+            reward_value = reward(prediction, match, prediction_time)
+            rewards.append(reward_value)
+            rewarded_miner_uids.append(miner_uid)
+            bt.logging.info(f"Reward for miner {miner_uid} for match {match_id}: {reward_value}")
+
+            # Update the reward in the database
+            c.execute("UPDATE predictions SET reward=? WHERE match_id=? AND miner_uid=?", (reward_value, match_id, miner_uid))
+
+    conn.commit()
+    conn.close()
 
     rewards_array = np.array(rewards)
     return rewards_array, rewarded_miner_uids if rewards_array.size > 0 else (np.array([]), [])

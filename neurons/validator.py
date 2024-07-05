@@ -31,6 +31,8 @@ from scorepredict import __version__
 
 # import base validator class which takes care of most of the boilerplate
 from scorepredict.base.validator import BaseValidatorNeuron
+from scorepredict.utils.utils import set_simulated_time, get_current_time
+from datetime import datetime, time as dt_time
 
 
 class Validator(BaseValidatorNeuron):
@@ -47,6 +49,15 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info("load_state()")
         self.load_state()
+
+                # Set up simulated time if enabled
+        if self.config.simulate_time:
+            # Set initial simulated time to 2 PM UTC of the current day
+            initial_time = datetime.utcnow().replace(hour=14, minute=0, second=0, microsecond=0)
+            set_simulated_time(initial_time)
+            bt.logging.info(f"Simulated time initialized to: {get_current_time(self)}")
+        else:
+            bt.logging.info(f"Using real time: {datetime.utcnow()}")
 
         # TODO(developer): Anything specific to your use case you can do here
         #netrc_path = pathlib.Path.home() / ".netrc"

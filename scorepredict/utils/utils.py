@@ -37,6 +37,23 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Global variable to store the simulated current time
+simulated_current_time = datetime.datetime.utcnow()
+
+def get_current_time(self):
+    if self.config.simulate_time:
+        return simulated_current_time
+    else:
+        return datetime.datetime.utcnow()
+
+def set_simulated_time(new_time):
+    global simulated_current_time
+    simulated_current_time = new_time
+
+def advance_time(self, minutes):
+    global simulated_current_time
+    if self.config.simulate_time:
+        simulated_current_time += datetime.timedelta(minutes=minutes)
 
 def check_uid_availability(
     metagraph: "bt.metagraph.Metagraph", uid: int, vpermit_tao_limit: int
@@ -227,7 +244,7 @@ def get_validators_and_shares(self, vpermit_tao_limit: int, vtrust_threshold: fl
 
 
 
-def get_matches(self, date_str, status: str = None):
+def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int = 60):
     """
     Fetches upcoming matches from a football data API and returns them as a dictionary.
     Each match is keyed by its match ID, making it easy to reference specific matches.
@@ -247,10 +264,13 @@ def get_matches(self, date_str, status: str = None):
     headers = {'X-Auth-Token': API_KEY}
     
     params = {
-        'dateFrom': date_str,
-        'dateTo': date_str,
+        'dateFrom': date_str.strftime('%Y-%m-%d'),
+        'dateTo': date_str.strftime('%Y-%m-%d'),
         'status': status
     }
+
+    bt.logging.info(f"Params: {params}")
+    bt.logging.info(f"date_str: {date_str}")
     
     response = requests.get(url, headers=headers, params=params)
     if response.status_code != 200:
@@ -259,29 +279,41 @@ def get_matches(self, date_str, status: str = None):
 
     data = response.json()
     matches = data.get('matches', [])
+    #bt.logging.info(f"Matches Found: {matches}")
     
     # TODO Check for status = FINSIHED and return all games if so
     if status == 'FINISHED':
         return {match['id']: match for match in matches}
 
     # Current UTC time
-    current_utc = datetime.datetime.utcnow()
-    bt.logging.info(f"Current UTC time: {current_utc}")
-    # Filter matches to be between 60 and 75 minutes before their kickoff time
+    # current_utc = get_current_time(self)
+    # bt.logging.info(f"Current UTC time: {current_utc}")
+    
+    # Filter matches to be between 0 and specified minutes before their kickoff time
     upcoming_matches = {}
     for match in matches:
         match_time = datetime.datetime.fromisoformat(match['utcDate'].rstrip('Z'))
-        time_difference = (match_time - current_utc).total_seconds() / 60  # Convert seconds to minutes
+        
+        # Convert date_str to datetime object if it's not already
+        if isinstance(date_str, str):
+            current_time = datetime.datetime.fromisoformat(date_str)
+        else:
+            current_time = date_str
 
-        if 60 <= time_difference <= 75:
+        # Calculate time difference in minutes
+        time_difference = (match_time - current_time).total_seconds() / 60
+
+        bt.logging.info(f"Time difference: {time_difference}")
+
+        if 0 <= time_difference <= minutes_before_kickoff:
             upcoming_matches[match['id']] = match
 
-    bt.logging.info(f"Fetched {len(upcoming_matches)} upcoming matches between 60 and 75 minutes before kickoff.")
+    bt.logging.info(f"Fetched {len(upcoming_matches)} upcoming matches within {minutes_before_kickoff} minutes before kickoff.")
     
     # Return None if no upcoming matches are found
     return upcoming_matches if upcoming_matches else None
 
-def assign_challenges_to_validators(self):
+def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     """
     Assigns upcoming matches to validators based on their current stake. Higher stake gets more matches to send to miners.
 
@@ -310,9 +342,10 @@ def assign_challenges_to_validators(self):
     validator_sequences = {uid: i for i, (uid, _) in enumerate(sorted_validators)}
     
     # Retrieve upcoming matches for today as a dictionary with match IDs as keys
-    target_date = datetime.datetime.utcnow().strftime('%Y-%m-%d')
-    matches_dict = get_matches(self, date_str=target_date)
-    
+    #target_date = datetime.datetime.utcnow()
+    target_date = simulated_current_time
+    matches_dict = get_matches(self, date_str=target_date, minutes_before_kickoff=minutes_before_kickoff)
+
     # Check if matches_dict is None or empty
     if not matches_dict:
         bt.logging.info("No upcoming matches found to assign to validators.")
@@ -365,6 +398,7 @@ def keep_validators_alive(self):
     """
     Periodically syncs the metagraph and sets weights to keep validators alive and updated.
     """
+
     current_time = datetime.datetime.now()
     bt.logging.info("Keeping validators busy setting weights...")
 
@@ -374,10 +408,10 @@ def keep_validators_alive(self):
         self.resync_metagraph()
         self.set_weights()
         bt.logging.info("Performed periodic resync and set weights at: " + current_time.strftime('%Y-%m-%d %H:%M:%S'))
-        time.sleep(60)  # Sleep for 300 seconds or 5 minutes
+        time.sleep(1)  # Sleep for 300 seconds or 5 minutes TODO change back to actual
     else:
         bt.logging.info("No action needed. Next check in 5 minutes.")
-        time.sleep(60)  # Sleep for 300 seconds or 5 minutes
+        time.sleep(1)  # Sleep for 300 seconds or 5 minutes
 
 
 def get_all_validators_vtrust(
