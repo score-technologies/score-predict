@@ -53,14 +53,14 @@ async def forward(self):
 
     if self.config.simulate_time:
         # Advance simulated time by x minutes each iteration
-        advance_time(self, 10)
+        advance_time(self, 15)
         current_time = get_current_time(self)
         bt.logging.info(f"Current simulated time: {current_time}")
 
         # If it's past 8 PM UTC, reset the simulated time to 2 PM of the next day
         if current_time.hour >= 20:
             next_day = current_time.date() + timedelta(days=1)  # Use timedelta directly
-            new_time = datetime.combine(next_day, dt_time(10, 0))  # 2 PM
+            new_time = datetime.combine(next_day, dt_time(13, 0))  # 2 PM
             set_simulated_time(new_time)
             bt.logging.info(f"Reset simulated time to: {new_time}")
     else:
@@ -109,13 +109,13 @@ async def forward(self):
         for match_tuple in matches:
             match_id, match = match_tuple
             
-            # Create a unique key for each match and miner combination
-            game_key = (match_id, miner_uid)  
+            # Check if the miner has already made a prediction for this match
+            c.execute("SELECT * FROM predictions WHERE miner_uid=? AND match_id=?", (miner_uid, match_id))
+            existing_prediction = c.fetchone()
 
-            # Skip this match if it has already been sent for this miner
-            if game_key in self.sent_game_ids:
-                bt.logging.info(f"Match ID {match_id} already processed for miner UID {miner_uid}. Skipping.")
-                continue  
+            if existing_prediction:
+                bt.logging.info(f"Miner UID {miner_uid} has already made a prediction for Match ID {match_id}. Skipping.")
+                continue
 
             home_team = match['homeTeam']['name']
             away_team = match['awayTeam']['name']
@@ -137,7 +137,6 @@ async def forward(self):
                 deserialize=True,
             )
 
-
             # Log the received responses
             bt.logging.info(f"Received responses for match {match_id}: {responses}")
             # Process each response in the list
@@ -145,11 +144,6 @@ async def forward(self):
                 if response.get('predicted_winner') is None:
                     bt.logging.info(f"No prediction received for match {match_id} from miner {miner_uid}. Ending process for this match.")
                     continue
-
-                # submissions[(miner_uid, match_id)] = {
-                #     'timestamp': current_time,
-                #     'prediction': response
-                # }
 
                 # Check if a prediction already exists
                 c.execute("SELECT * FROM predictions WHERE miner_uid=? AND match_id=?", (miner_uid, match_id))

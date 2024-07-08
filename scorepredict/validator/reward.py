@@ -26,20 +26,46 @@ from typing import Tuple, List
 from scorepredict.utils.utils import get_matches
 from scorepredict.utils.utils import get_current_time
 
-def calculate_time_bonus(prediction_time, match_time):
-    """Calculate bonus based on how early the prediction was made"""
-    hours_before = (match_time - prediction_time).total_seconds() / 3600
-    if hours_before >= 6:
-        return 1.0  # Maximum bonus
-    elif hours_before <= 1:
-        return 0.0  # No bonus
-    else:
-        return (hours_before - 1) / 5  # Linear scale between 1 and 6 hours
+def get_streak(c, miner_uid, prediction_time):
+    """
+    Calculate the current streak of correct predictions for a miner.
+    """
+    c.execute("""
+        SELECT prediction, reward
+        FROM predictions
+        WHERE miner_uid = ? AND timestamp < ?
+        ORDER BY timestamp DESC
+        LIMIT 20
+    """, (miner_uid, prediction_time))
+    
+    streak = 0
+    for pred, reward in c.fetchall():
+        if reward is not None and reward > 0:
+            streak += 1
+        else:
+            break
+    return streak
 
-def reward(prediction, match_data, prediction_time):
+def get_streak_multiplier(streak):
+    """
+    Return the multiplier based on the current streak.
+    """
+    if streak >= 20:
+        return 2.0
+    elif streak >= 10:
+        return 1.8
+    elif streak >= 5:
+        return 1.4
+    elif streak >= 2:
+        return 1.1
+    else:
+        return 1.0
+
+def reward(prediction, match_data, prediction_time, c, miner_uid):
     """
     Reward the miner response to the match prediction request.
     """
+    
     actual_winner_code = match_data['score']['winner']
     home_team_name = match_data['homeTeam']['name']
     away_team_name = match_data['awayTeam']['name']
@@ -54,12 +80,15 @@ def reward(prediction, match_data, prediction_time):
     base_reward = 3.0 if prediction == actual_winner else 0.0
     
     match_time = datetime.fromisoformat(match_data['utcDate'].rstrip('Z'))
-    #time_bonus = calculate_time_bonus(prediction_time, match_time)
     
-    #total_reward = base_reward * (1 + time_bonus)
-    total_reward = base_reward
+    # Calculate streak and apply multiplier
+    streak = get_streak(c, miner_uid, prediction_time)
+    streak_multiplier = get_streak_multiplier(streak)
+    
+    total_reward = base_reward * streak_multiplier
 
     return total_reward
+
 
 def get_rewards(self) -> Tuple[np.ndarray, List[int]]:
     # We check for games completed 24 hours ago if simulating time for testing, otherwise just checks for games completed just now
@@ -92,7 +121,7 @@ def get_rewards(self) -> Tuple[np.ndarray, List[int]]:
                 continue
 
             prediction_time = datetime.fromisoformat(timestamp)
-            reward_value = reward(prediction, match, prediction_time)
+            reward_value = reward(prediction, match, prediction_time, c, miner_uid)
             rewards.append(reward_value)
             rewarded_miner_uids.append(miner_uid)
             bt.logging.info(f"Reward for miner {miner_uid} for match {match_id}: {reward_value}")
