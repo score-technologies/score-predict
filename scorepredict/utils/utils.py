@@ -335,6 +335,11 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     # Retrieve validator UIDs and their stake amounts
     validator_shares = get_validators_and_shares(self, self.config.neuron.vpermit_tao_limit)
     
+    # Check if there are any validators available
+    if not validator_shares:
+        bt.logging.error("No validators available to assign challenges.")
+        return {}
+
     # Sort validators based on stake amounts in descending order
     sorted_validators = sorted(validator_shares.items(), key=lambda x: x[1], reverse=True)
     
@@ -342,7 +347,6 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     validator_sequences = {uid: i for i, (uid, _) in enumerate(sorted_validators)}
     
     # Retrieve upcoming matches for today as a dictionary with match IDs as keys
-    #target_date = datetime.datetime.utcnow()
     target_date = simulated_current_time
     matches_dict = get_matches(self, date_str=target_date, minutes_before_kickoff=minutes_before_kickoff)
 
@@ -354,6 +358,7 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     # Get all miner UIDs
     miner_uids = get_all_miners(self)
     bt.logging.info(f"⛏️ Miner UIDs: {miner_uids}")
+    
     # Number of challenges per validator
     challenges_per_validator = len(matches_dict) // len(validator_sequences)
     

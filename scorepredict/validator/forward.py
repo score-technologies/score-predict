@@ -197,7 +197,7 @@ async def forward(self):
                 bt.logging.info(f"No rewards to process. Skipping scoring.")
 
             # Add the match ID and miner UID to the global set of sent game IDs
-            self.sent_game_ids.add(game_key)   
+            #self.sent_game_ids.add(game_key)   
     
     #bt.logging.info(f"Unprocessed Submissions: {len(submissions.submissions)}")
     #bt.logging.info(f"Submissions: {submissions}")

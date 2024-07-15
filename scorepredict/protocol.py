@@ -43,9 +43,7 @@ class Prediction(bt.Synapse, BaseModel):
     match_date: str = Field(..., title="Match Date", description="Date and time of the match (ISO 8601 string format)")
     deadline: str = Field(..., title="Prediction Deadline", description="Deadline for submitting predictions (ISO 8601 string format)")
     predicted_winner: Optional[str] = Field(None, title="Predicted Winner", description="Predicted winning team")
-    predicted_score_home: Optional[int] = Field(None, title="Predicted Home Score", description="Predicted number of goals by the home team")
-    predicted_score_away: Optional[int] = Field(None, title="Predicted Away Score", description="Predicted number of goals by the away team")
-
+    
 
     def deserialize(self) -> dict:
         """
@@ -62,6 +60,4 @@ class Prediction(bt.Synapse, BaseModel):
             'match_date': self.match_date,
             'deadline': self.deadline,
             'predicted_winner': self.predicted_winner,
-            'predicted_score_home': self.predicted_score_home,
-            'predicted_score_away': self.predicted_score_away
         }
