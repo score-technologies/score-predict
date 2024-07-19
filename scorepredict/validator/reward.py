@@ -108,7 +108,8 @@ def get_rewards(self) -> Tuple[np.ndarray, List[int]]:
     rewards = []
     rewarded_miner_uids = []
 
-    conn = sqlite3.connect('predictions.db')
+    db_name = f'predictions-{self.uid}.db'
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
 
     for match_id, match in finished_matches.items():

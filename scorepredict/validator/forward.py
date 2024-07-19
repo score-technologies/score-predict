@@ -28,6 +28,7 @@ from scorepredict.validator.reward import get_rewards
 from scorepredict.utils.uids import get_random_uids
 from scorepredict.utils.utils import assign_challenges_to_validators, get_all_validators, keep_validators_alive
 from scorepredict.utils.utils import get_current_time, advance_time, set_simulated_time
+from scorepredict.utils.utils import send_predictions_to_website
 
 import sqlite3
 import collections
@@ -69,18 +70,22 @@ async def forward(self):
     
     global current_fetch_date
     current_time = datetime.now()
+    send_predictions_to_website(self)
 
     if self.step % 10 == 0:
-        bt.logging.info(f"Keeping Alive - Step: {self.step}")
+        bt.logging.info(f"Keeping Alive & Send Predictions To Website - Step: {self.step}")
         self.set_weights()
+        
 
     # Initialize SQLite database connection
-    conn = sqlite3.connect('predictions.db')
+    
+    db_name = f'predictions-{self.uid}.db'
+    conn = sqlite3.connect(db_name)
     c = conn.cursor()
     
     # Create table if not exists
     c.execute('''CREATE TABLE IF NOT EXISTS predictions
-                 (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, reward REAL)''')
+                 (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, reward REAL, sentWebsite INTEGER)''')
     
     
     # Fetch all validators
@@ -90,12 +95,7 @@ async def forward(self):
     # Fetch upcoming matches this validator should serve to miners
     bt.logging.info("🛜 Looking for upcoming matches")
     upcoming_matches = assign_challenges_to_validators(self, minutes_before_kickoff=60)
-    #bt.logging.info(f"Upcoming matches: {upcoming_matches}")
-
-    # If no upcoming matches, keep the validator alive
-    # if not upcoming_matches:
-    #     keep_validators_alive(self)
-    #     return
+    #bt.logging.debug(f"Upcoming matches: {upcoming_matches}")
 
     # Initialize or retrieve the set of sent game IDs
     if not hasattr(self, 'sent_game_ids'):
@@ -155,8 +155,8 @@ async def forward(self):
                               (response['predicted_winner'], datetime.now(), miner_uid, match_id))
                 else:
                     # Insert new prediction with reward set to None
-                    c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?, ?)",
-                              (miner_uid, match_id, response['predicted_winner'], datetime.now(), None))
+                    c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?)",
+                              (miner_uid, match_id, response['predicted_winner'], datetime.now(), None, 0))
 
                 conn.commit()                
 

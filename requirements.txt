@@ -1,9 +1,11 @@
 bittensor==7.2.0
 openai
 openapi-schema-pydantic
-torch
-pandas
-numpy
+torch==2.0.1
+pandas==2.2.2
+numpy==1.26.4
 pydantic
 wandb
 python-dotenv
+joblib==1.2.0
+scikit-learn==1.2.2

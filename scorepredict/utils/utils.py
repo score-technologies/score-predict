@@ -23,6 +23,7 @@ import torch
 import functools
 import numpy as np
 import random as pyrandom
+import sqlite3
 
 from Crypto.Random import random
 from itertools import combinations, cycle
@@ -39,6 +40,69 @@ load_dotenv()
 
 # Global variable to store the simulated current time
 simulated_current_time = datetime.datetime.utcnow()
+
+def send_predictions_to_website(self):
+    """
+    Checks for predictions in the database, sends them to the website API,
+    and updates the 'sentWebsite' field in the database.
+    """
+    db_name = f'predictions-{self.uid}.db'
+    conn = sqlite3.connect(db_name)
+    c = conn.cursor()
+
+    # Add 'sentWebsite' column if it doesn't exist
+    c.execute('''
+        PRAGMA table_info(predictions)
+    ''')
+    columns = [column[1] for column in c.fetchall()]
+    if 'sentWebsite' not in columns:
+        c.execute('''
+            ALTER TABLE predictions
+            ADD COLUMN sentWebsite INTEGER DEFAULT 0
+        ''')
+        conn.commit()
+
+    # Fetch unsent predictions
+    c.execute('''
+        SELECT miner_uid, match_id, prediction
+        FROM predictions
+        WHERE sentWebsite = 0
+    ''')
+    unsent_predictions = c.fetchall()
+
+    api_url = "https://predict-app-rho.vercel.app/api/predictions" #TODO change to new domain
+
+    for miner_uid, match_id, prediction in unsent_predictions:
+        payload = {
+            # "matchId": int(match_id),  
+            "matchId": 493913,
+            "userId": str(miner_uid),
+            "prediction": prediction,
+            "userType": "miner"
+        }
+
+        try:
+            response = requests.post(api_url, json=payload)
+            print(f"Sent payload: {payload}")  # Log the sent data
+            print(f"Response status: {response.status_code}")
+            print(f"Response content: {response.text}")  # Log the response content
+
+            if response.status_code == 201:
+                # Update the sentWebsite field
+                c.execute('''
+                    UPDATE predictions
+                    SET sentWebsite = 1
+                    WHERE miner_uid = ? AND match_id = ?
+                ''', (miner_uid, match_id))
+                conn.commit()
+                bt.logging.info(f"Prediction for match {match_id} by miner {miner_uid} sent successfully.")
+            else:
+                bt.logging.error(f"Failed to send prediction. Status: {response.status_code}, Content: {response.text}")
+        except requests.RequestException as e:
+            bt.logging.error(f"Error sending prediction to API: {e}")
+            continue  # Skip to the next prediction if an error occurs
+
+    conn.close()
 
 def get_current_time(self):
     if self.config.simulate_time:
@@ -217,29 +281,38 @@ def get_validators_and_shares(self, vpermit_tao_limit: int, vtrust_threshold: fl
     """
     Retrieves the UIDs of all validators in the network and their share of the total stake.
     Qualifications for validator peers:
-        - stake > threshold (e.g., 500, may vary per subnet)
-        - validator permit (implied with vtrust score)
-        - validator trust score > threshold (e.g., 0.5)
+        - validator permit
+        - stake > vpermit_tao_limit
+        - validator trust score > vtrust_threshold
+    
     Returns:
         Dict[int, float]: A dictionary mapping each validator's UID to their share of the total stake.
     """
-    # Convert to PyTorch tensor if necessary and apply threshold
-    validator_trust_tensor = torch.tensor(self.metagraph.validator_trust)
-    vtrusted_indices = torch.where(validator_trust_tensor >= vtrust_threshold)[0].tolist()
-    bt.logging.info(f"Vtrusted uids: {vtrusted_indices}")
-
-    # Filter UIDs based on stake and convert indices to actual UIDs
-    stake_uids = [uid for uid in vtrusted_indices if self.metagraph.S[uid] > vpermit_tao_limit]
-    bt.logging.info(f"Validators uids with minimum required stake: {stake_uids}")
-
-    # Calculate total stake
-    total_stake = sum(self.metagraph.S[uid] for uid in stake_uids)
-    bt.logging.info(f"Total stake: {total_stake}")
-
+    # Ensure vpermits is a torch.Tensor
+    vpermits = torch.tensor(self.metagraph.validator_permit)
+    vpermit_uids = torch.where(vpermits)[0]
+    
+    # Convert S and validator_trust to torch.Tensor
+    S_tensor = torch.tensor(self.metagraph.S)
+    vtrust_tensor = torch.tensor(self.metagraph.validator_trust)
+    
+    # Filter UIDs based on stake and vtrust
+    query_idxs = torch.where(
+        (S_tensor[vpermit_uids] > vpermit_tao_limit) &
+        (vtrust_tensor[vpermit_uids] >= vtrust_threshold)
+    )[0]
+    validator_uids = vpermit_uids[query_idxs].tolist()
+    
+    # Calculate total stake of selected validators
+    total_stake = sum(S_tensor[validator_uids].tolist())
+    
     # Calculate each validator's share
-    validator_shares = {uid: self.metagraph.S[uid] / total_stake for uid in stake_uids}
-    bt.logging.info(f"Validator shares: {validator_shares}")
+    validator_shares = {uid: (S_tensor[uid] / total_stake).item() for uid in validator_uids}
 
+    bt.logging.info(f"Validator UIDs: {validator_uids}")
+    bt.logging.info(f"Total stake: {total_stake}")
+    bt.logging.info(f"Validator shares: {validator_shares}")
+    
     return validator_shares
 
 
@@ -269,19 +342,26 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
         'status': status
     }
 
-    bt.logging.info(f"Params: {params}")
-    bt.logging.info(f"date_str: {date_str}")
+    bt.logging.debug(f"Params: {params}")
+    bt.logging.debug(f"date_str: {date_str}")
     
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        bt.logging.error(f"Failed to fetch matches: HTTP {response.status_code}")
-        raise Exception(f"API call failed with status {response.status_code}")
+    while True:
+        try:
+            response = requests.get(url, headers=headers, params=params)
+            if response.status_code == 200:
+                break
+            else:
+                bt.logging.error(f"Failed to fetch matches: HTTP {response.status_code}")
+        except Exception as e:
+            bt.logging.error(f"API call failed: {e}")
+        
+        bt.logging.info("Retrying in 5 seconds...")
+        time.sleep(5)
 
     data = response.json()
     matches = data.get('matches', [])
     #bt.logging.info(f"Matches Found: {matches}")
     
-    # TODO Check for status = FINSIHED and return all games if so
     if status == 'FINISHED':
         return {match['id']: match for match in matches}
 
@@ -303,7 +383,7 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
         # Calculate time difference in minutes
         time_difference = (match_time - current_time).total_seconds() / 60
 
-        bt.logging.info(f"Time difference: {time_difference}")
+        bt.logging.debug(f"Time difference: {time_difference}")
 
         if 0 <= time_difference <= minutes_before_kickoff:
             upcoming_matches[match['id']] = match
@@ -335,7 +415,6 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     # Retrieve validator UIDs and their stake amounts
     validator_shares = get_validators_and_shares(self, self.config.neuron.vpermit_tao_limit)
     
-    # Check if there are any validators available
     if not validator_shares:
         bt.logging.error("No validators available to assign challenges.")
         return {}
@@ -343,14 +422,10 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     # Sort validators based on stake amounts in descending order
     sorted_validators = sorted(validator_shares.items(), key=lambda x: x[1], reverse=True)
     
-    # Assign sequence numbers to validators
-    validator_sequences = {uid: i for i, (uid, _) in enumerate(sorted_validators)}
-    
     # Retrieve upcoming matches for today as a dictionary with match IDs as keys
     target_date = simulated_current_time
     matches_dict = get_matches(self, date_str=target_date, minutes_before_kickoff=minutes_before_kickoff)
 
-    # Check if matches_dict is None or empty
     if not matches_dict:
         bt.logging.info("No upcoming matches found to assign to validators.")
         return {}
@@ -359,39 +434,51 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     miner_uids = get_all_miners(self)
     bt.logging.info(f"⛏️ Miner UIDs: {miner_uids}")
     
-    # Number of challenges per validator
-    challenges_per_validator = len(matches_dict) // len(validator_sequences)
-    
+    # Assign matches to validators
     validator_challenges = {}
+    match_ids = list(matches_dict.keys())
+    match_index = 0
     
-    for validator_uid in validator_sequences:
+    for validator_uid, _ in sorted_validators:
+        if match_index >= len(match_ids):
+            break
+        
+        validator_challenges[validator_uid] = {}
+        
+        # Assign one match to each validator
+        assigned_match_id = match_ids[match_index]
+        validator_challenges[validator_uid][assigned_match_id] = matches_dict[assigned_match_id]
+        match_index += 1
+    
+    # Distribute remaining matches
+    while match_index < len(match_ids):
+        for validator_uid, _ in sorted_validators:
+            if match_index >= len(match_ids):
+                break
+            assigned_match_id = match_ids[match_index]
+            validator_challenges[validator_uid][assigned_match_id] = matches_dict[assigned_match_id]
+            match_index += 1
+    
+    # Assign challenges to miners for each validator
+    for validator_uid in validator_challenges:
         miner_challenges = {}
+        validator_matches = list(validator_challenges[validator_uid].keys())
         
         for miner_uid in miner_uids:
-            # Get the current block hash
             block_hash = get_current_epoch(self)
-            
-            # Create a unique seed for the random generator
             seed = f"{block_hash}_{miner_uid}"
             pyrandom.seed(seed)
-
-            # Shuffle the match IDs
-            shuffled_match_ids = list(matches_dict.keys())
-            pyrandom.shuffle(shuffled_match_ids)
             
-            # Assign challenges to the current validator
-            sequence = validator_sequences[validator_uid]
-            start_index = sequence * challenges_per_validator
-            end_index = start_index + challenges_per_validator
+            pyrandom.shuffle(validator_matches)
             miner_challenges[miner_uid] = [
                 (match_id, matches_dict[match_id])
-                for match_id in shuffled_match_ids[start_index:end_index]
+                for match_id in validator_matches
             ]
         
         validator_challenges[validator_uid] = miner_challenges
     
-    bt.logging.info(f"Validator challenges: {validator_challenges}")
-    bt.logging.info(f"My UID: {self.uid}")
+    bt.logging.debug(f"Validator challenges: {validator_challenges}")
+    bt.logging.debug(f"My UID: {self.uid}")
     
     # Filter challenges for the current validator
     current_validator_challenges = validator_challenges.get(self.uid, {})
