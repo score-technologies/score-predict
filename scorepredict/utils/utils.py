@@ -50,6 +50,17 @@ def send_predictions_to_website(self):
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
 
+    # Create the predictions table if it doesn't exist
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS predictions (
+            miner_uid TEXT,
+            match_id INTEGER,
+            prediction TEXT,
+            sentWebsite INTEGER DEFAULT 0
+        )
+    ''')
+    conn.commit()
+
     # Add 'sentWebsite' column if it doesn't exist
     c.execute('''
         PRAGMA table_info(predictions)
@@ -74,8 +85,7 @@ def send_predictions_to_website(self):
 
     for miner_uid, match_id, prediction in unsent_predictions:
         payload = {
-            # "matchId": int(match_id),  
-            "matchId": 493913,
+            "matchId": int(match_id),  # Ensure matchId is an integer
             "userId": str(miner_uid),
             "prediction": prediction,
             "userType": "miner"
