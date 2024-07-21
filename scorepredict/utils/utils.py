@@ -53,29 +53,19 @@ def send_predictions_to_website(self):
     # Create the predictions table if it doesn't exist
     c.execute('''
         CREATE TABLE IF NOT EXISTS predictions (
-            miner_uid TEXT,
+            miner_uid INTEGER,
             match_id INTEGER,
             prediction TEXT,
+            timestamp DATETIME,
+            reward REAL,
             sentWebsite INTEGER DEFAULT 0
         )
     ''')
     conn.commit()
 
-    # Add 'sentWebsite' column if it doesn't exist
-    c.execute('''
-        PRAGMA table_info(predictions)
-    ''')
-    columns = [column[1] for column in c.fetchall()]
-    if 'sentWebsite' not in columns:
-        c.execute('''
-            ALTER TABLE predictions
-            ADD COLUMN sentWebsite INTEGER DEFAULT 0
-        ''')
-        conn.commit()
-
     # Fetch unsent predictions
     c.execute('''
-        SELECT miner_uid, match_id, prediction
+        SELECT miner_uid, match_id, prediction, timestamp, reward
         FROM predictions
         WHERE sentWebsite = 0
     ''')
@@ -83,11 +73,13 @@ def send_predictions_to_website(self):
 
     api_url = "https://predict-app-rho.vercel.app/api/predictions" #TODO change to new domain
 
-    for miner_uid, match_id, prediction in unsent_predictions:
+    for miner_uid, match_id, prediction, timestamp, reward in unsent_predictions:
         payload = {
-            "matchId": int(match_id),  # Ensure matchId is an integer
+            "matchId": int(match_id),
             "userId": str(miner_uid),
             "prediction": prediction,
+            "timestamp": timestamp,
+            "reward": reward,
             "userType": "miner"
         }
 
