@@ -97,7 +97,7 @@ def send_predictions_to_website(self):
                     WHERE miner_uid = ? AND match_id = ?
                 ''', (miner_uid, match_id))
                 conn.commit()
-                bt.logging.info(f"Prediction for match {match_id} by miner {miner_uid} sent successfully.")
+                bt.logging.debug(f"Prediction for match {match_id} by miner {miner_uid} sent successfully.")
             else:
                 bt.logging.error(f"Failed to send prediction. Status: {response.status_code}, Content: {response.text}")
         except requests.RequestException as e:
@@ -331,9 +331,9 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
         Exception: If the API call fails or returns an unexpected response.
     """
     API_KEY = os.getenv('FOOTBALL_API_KEY')
-    if self.config.test_api == True:
-        url = 'http://170.64.240.149:5000/matches'
-        bt.logging.info("Using test API")
+    if self.config.score_api == True:
+        url = 'http://api.scorepredict.io/matches'
+        bt.logging.debug("Using score API")
     else:
         url = 'https://api.football-data.org/v4/matches'
     headers = {'X-Auth-Token': API_KEY}
@@ -362,14 +362,10 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
 
     data = response.json()
     matches = data.get('matches', [])
-    #bt.logging.info(f"Matches Found: {matches}")
+    bt.logging.debug(f"Matches Found: {matches}")
     
     if status == 'FINISHED':
         return {match['id']: match for match in matches}
-
-    # Current UTC time
-    # current_utc = get_current_time(self)
-    # bt.logging.info(f"Current UTC time: {current_utc}")
     
     # Filter matches to be between 0 and specified minutes before their kickoff time
     upcoming_matches = {}
@@ -390,7 +386,7 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
         if 0 <= time_difference <= minutes_before_kickoff:
             upcoming_matches[match['id']] = match
 
-    bt.logging.info(f"Fetched {len(upcoming_matches)} upcoming matches within {minutes_before_kickoff} minutes before kickoff.")
+    bt.logging.debug(f"Fetched {len(upcoming_matches)} upcoming matches within {minutes_before_kickoff} minutes before kickoff.")
     
     # Return None if no upcoming matches are found
     return upcoming_matches if upcoming_matches else None
@@ -429,7 +425,7 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     matches_dict = get_matches(self, date_str=target_date, minutes_before_kickoff=minutes_before_kickoff)
 
     if not matches_dict:
-        bt.logging.info("No upcoming matches found to assign to validators.")
+        bt.logging.debug("No upcoming matches found to assign to validators.")
         return {}
 
     # Get all miner UIDs
@@ -486,27 +482,6 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     current_validator_challenges = validator_challenges.get(self.uid, {})
     
     return current_validator_challenges
-
-
-def keep_validators_alive(self):
-    """
-    Periodically syncs the metagraph and sets weights to keep validators alive and updated.
-    """
-
-    current_time = datetime.datetime.now()
-    bt.logging.info("Keeping validators busy setting weights...")
-
-    # Perform the sync and weight setting at the top of the hour or just before
-    minutes = current_time.minute
-    if 15 <= minutes or minutes < 25:
-        self.resync_metagraph()
-        self.set_weights()
-        bt.logging.info("Performed periodic resync and set weights at: " + current_time.strftime('%Y-%m-%d %H:%M:%S'))
-        time.sleep(1)  # Sleep for 300 seconds or 5 minutes TODO change back to actual
-    else:
-        bt.logging.info("No action needed. Next check in 5 minutes.")
-        time.sleep(1)  # Sleep for 300 seconds or 5 minutes
-
 
 def get_all_validators_vtrust(
     self,

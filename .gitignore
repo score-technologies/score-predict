@@ -167,4 +167,4 @@ testing/
 .commands
 predictions_log.txt
 fixreqs.py
-predictions.db
+predictions*.db

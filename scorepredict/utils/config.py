@@ -250,9 +250,9 @@ def add_validator_args(cls, parser):
     )
 
     parser.add_argument(
-        "--test_api",
+        "--score_api",
         type=str,
-        help="Whether to use the mock test api or not.",
+        help="Whether to use the Score api or not.",
         default=True,
     )
     

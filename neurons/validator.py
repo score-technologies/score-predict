@@ -55,11 +55,12 @@ class Validator(BaseValidatorNeuron):
             # Set initial simulated time to 2 PM UTC of the current day
             initial_time = datetime.utcnow().replace(hour=14, minute=0, second=0, microsecond=0)
             set_simulated_time(initial_time)
-            bt.logging.info(f"Simulated time initialized to: {get_current_time(self)}")
+            bt.logging.debug(f"Simulated time initialized to: {get_current_time(self)}")
         else:
-            bt.logging.info(f"Using real time: {datetime.utcnow()}")
+            bt.logging.debug(f"Using real time: {datetime.utcnow()}")
 
         # TODO(developer): Anything specific to your use case you can do here
+        
         #netrc_path = pathlib.Path.home() / ".netrc"
         #wandb_api_key = os.getenv("WANDB_API_KEY")
         #if wandb_api_key is not None:

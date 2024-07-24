@@ -1,7 +1,6 @@
 # The MIT License (MIT)
-# Copyright © 2023 Yuma Rao
-# TODO(developer): Set your name
-# Copyright © 2023 <your name>
+# Copyright © 2024 Yuma Rao
+# Copyright © 2024 Score Predict
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -24,9 +23,7 @@ import bittensor as bt
 import datetime
 from dateutil import parser
 
-from openai import OpenAI
 import json
-import bittensor
 import asyncio
 from dotenv import load_dotenv
 
@@ -53,8 +50,6 @@ class Miner(BaseMinerNeuron):
         super(Miner, self).__init__(config=config)
         self.predictor = FootballPredictor()
 
-        # TODO(developer): Anything specific to your use case you can do here
-
     def save_state(self):
         """
         Saves the state of the neuron. Override this method to implement saving logic.
@@ -71,106 +66,21 @@ class Miner(BaseMinerNeuron):
             # Parse the date_time_str to a datetime object and then convert to a date string (YYYY-MM-DD)
             date = parser.parse(date_time_str).date().isoformat()
 
+            # Let's use our base predictor to make the prediciton
             result = self.predictor.predict_winner(home_team, away_team, date)
             
             # Update the synapse with the predicted winner
             synapse.predicted_winner = result
             
-            bt.logging.info(f"Prediction: {result}")
-            bt.logging.info(f"Returned Synapse: {synapse}")
+            bt.logging.debug(f"Prediction: {result}")
+            bt.logging.debug(f"Returned Synapse: {synapse}")
             return synapse
 
         except Exception as e:
             bt.logging.error(f"An error occurred: {e}")
             synapse.predicted_winner = None
-            return synapse
+            return synapse        
 
-    # async def forward(self, synapse: scorepredict.protocol.Prediction) -> scorepredict.protocol.Prediction:
-    #     """
-    #     Processes the incoming 'Prediction' synapse by performing a predefined operation on the input data.
-    #     This method should be replaced with actual logic relevant to the miner's purpose.
-
-    #     Args:
-    #         synapse (template.protocol.Dummy): The synapse object containing the 'dummy_input' data.
-
-    #     Returns:
-    #         template.protocol.Dummy: The synapse object with the 'dummy_output' field set to twice the 'dummy_input' value.
-
-    #     The 'forward' function is a placeholder and should be overridden with logic that is appropriate for
-    #     the miner's intended operation. This method demonstrates a basic transformation of input data.
-    #     """ 
-
-    #     time.sleep(1)
-
-    #     # Fetch the validators openai api key from config - 
-    #     # use --openai_key xxxxxx to set the key 
-    #     #api_key = self.config.openai_key
-    #     api_key = os.getenv('OPENAI_API_KEY')
-
-    #     if not api_key:
-    #         bt.logging.warning("No OpenAI key found - add it as a parameter when running --openai_key")
-    #         # Randomly pick a winner as a fallback
-    #         import random
-    #         teams = [synapse.home_team, synapse.away_team]
-    #         random_winner = random.choice(teams)
-    #         synapse.predicted_winner = random_winner
-    #         synapse.predicted_score_home = None
-    #         synapse.predicted_score_away = None
-
-    #         bt.logging.info(f"👈 Random prediction {synapse}")
-    #         return synapse
-
-
-    #     try:
-    #         # Construct the prompt for OpenAI GPT model
-    #         prompt = f"""
-    #         Predict the outcome of the football match between {synapse.home_team} and {synapse.away_team} on {synapse.match_date}. Please provide the prediction in the following JSON format:
-    #         {{
-    #             "match_id": {synapse.match_id},
-    #             "winner": "team name",
-    #             "duration": "REGULAR",
-    #             "fullTime": {{
-    #                 "home": "number of goals by home team",
-    #                 "away": "number of goals by away team"
-    #             }}
-    #         }}
-    #         """
-
-    #         bt.logging.info(f"Prediction Prompt: {prompt}") 
-            
-    #         # Asynchronously fetch prediction using OpenAI GPT
-    #         client = OpenAI(api_key=api_key)
-
-    #         response = client.chat.completions.create(
-    #             model="gpt-3.5-turbo",
-    #             response_format={"type": "json_object"},
-    #             messages=[
-    #                 {"role": "system", "content": "You are a helpful assistant designed to output JSON."},
-    #                 {"role": "user", "content": prompt}
-    #             ]
-    #         )
-            
-    #         bt.logging.info(f"Prediction Response: {response.choices[0].message.content}")
-            
-    #         # Extract the prediction from the response
-    #         prediction_json = response.choices[0].message.content
-    #         prediction = json.loads(prediction_json) if prediction_json else {}
-            
-    #         # Update the synapse with the predicted values
-    #         synapse.predicted_winner = prediction.get('winner')
-    #         synapse.predicted_score_home = prediction['fullTime']['home']
-    #         synapse.predicted_score_away = prediction['fullTime']['away']
-            
-    #         bt.logging.info(f"Returned Synapse: {synapse}")
-    #         return synapse
-
-    #     except Exception as e:
-    #         bt.logging.error(f"An error occurred: {e}")
-    #         synapse.predicted_winner = None
-    #         synapse.predicted_score_home = None
-    #         synapse.predicted_score_away = None
-    #         return synapse
-        
 
     async def blacklist(
         self, synapse: scorepredict.protocol.Prediction
