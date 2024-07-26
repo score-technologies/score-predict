@@ -57,7 +57,7 @@ class Validator(BaseValidatorNeuron):
             set_simulated_time(initial_time)
             bt.logging.debug(f"Simulated time initialized to: {get_current_time(self)}")
         else:
-            bt.logging.debug(f"Using real time: {datetime.utcnow()}")
+            bt.logging.debug(f"Using real time: {datetime.now(time.utc)}")
 
         # TODO(developer): Anything specific to your use case you can do here
         

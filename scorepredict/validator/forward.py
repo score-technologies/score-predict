@@ -58,8 +58,9 @@ async def forward(self):
     else:
         current_time = get_current_time(self)
         bt.logging.debug(f"Current time: {current_time}")
+        bt.logging.debug(f"UTC time: {datetime.utcnow()}")
     
-    current_time = datetime.now()
+    #current_time = datetime.now()
     send_predictions_to_website(self)
 
     if self.step % 10 == 0:

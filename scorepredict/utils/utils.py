@@ -421,7 +421,7 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     sorted_validators = sorted(validator_shares.items(), key=lambda x: x[1], reverse=True)
     
     # Retrieve upcoming matches for today as a dictionary with match IDs as keys
-    target_date = simulated_current_time
+    target_date = get_current_time(self)
     matches_dict = get_matches(self, date_str=target_date, minutes_before_kickoff=minutes_before_kickoff)
 
     if not matches_dict:
