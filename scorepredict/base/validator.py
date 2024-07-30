@@ -153,8 +153,9 @@ class BaseValidatorNeuron(BaseNeuron):
             subprocess.run(["git", "pull"], check=True)
             
             # Restart the validator using PM2
-            #subprocess.run(["pm2", "restart", "validator"], check=True) 
-            
+            time.sleep(4)
+            subprocess.run(["pm2", "restart", "validator"], check=True) 
+
             
             bt.logging.info("Update and restart completed successfully.")
         except subprocess.CalledProcessError as e:
