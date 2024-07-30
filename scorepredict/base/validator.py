@@ -36,6 +36,7 @@ from scorepredict.utils.config import add_validator_args
 import datetime as dt
 import time
 from subprocess import Popen, PIPE
+import subprocess
 
 
 class BaseValidatorNeuron(BaseNeuron):
