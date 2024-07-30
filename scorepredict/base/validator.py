@@ -133,15 +133,29 @@ class BaseValidatorNeuron(BaseNeuron):
         return current_commit == latest_commit
 
     def should_restart(self) -> bool:
-        # Check if enough time has elapsed since the last update check, if not assume we are up to date.
-        if (
-            dt.datetime.now() - self.last_update_check
-        ).seconds < self.update_check_interval:
+        # Check if enough time has elapsed since the last update check
+        if (dt.datetime.now() - self.last_update_check).seconds < self.update_check_interval:
             return False
 
         self.last_update_check = dt.datetime.now()
 
-        return not self.is_git_latest()
+        if not self.is_git_latest():
+            bt.logging.info("An update is available. Preparing to update and restart.")
+            return True
+        return False
+
+    def update_and_restart(self):
+        bt.logging.info("Updating repository and restarting validator...")
+        try:
+            # Pull the latest changes
+            subprocess.run(["git", "pull"], check=True)
+            
+            # Restart the validator using PM2
+            subprocess.run(["pm2", "restart", "validator"], check=True)
+            
+            bt.logging.info("Update and restart completed successfully.")
+        except subprocess.CalledProcessError as e:
+            bt.logging.error(f"Failed to update and restart: {e}")
 
     async def concurrent_forward(self):
         coroutines = [
@@ -190,7 +204,9 @@ class BaseValidatorNeuron(BaseNeuron):
 
                 if self.config.neuron.auto_update and self.should_restart():
                     bt.logging.info(f"Validator is out of date, quitting to restart.")
-                    raise KeyboardInterrupt
+                    self.update_and_restart()
+                    break
+                    #raise KeyboardInterrupt
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
