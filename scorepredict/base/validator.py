@@ -90,7 +90,7 @@ class BaseValidatorNeuron(BaseNeuron):
         self.lock = asyncio.Lock()
 
         self.last_update_check = dt.datetime.now()
-        self.update_check_interval = 2  # Check for updates every hour
+        self.update_check_interval = 3600  # Check for updates every hour
 
  
     def serve_axon(self):
@@ -152,7 +152,6 @@ class BaseValidatorNeuron(BaseNeuron):
             # Pull the latest changes
             subprocess.run(["git", "pull"], check=True)
             # Restart the validator using PM2
-            time.sleep(4)
             subprocess.run(["pm2", "restart", "validator"], check=True) 
             
             bt.logging.info("Update and restart completed successfully.")
@@ -204,11 +203,11 @@ class BaseValidatorNeuron(BaseNeuron):
                 if self.should_exit:
                     break
 
-                if self.config.neuron.auto_update and self.should_restart():
-                    bt.logging.info(f"Validator is out of date, quitting to restart.")
-                    self.update_and_restart()
-                    #break
-                    raise KeyboardInterrupt
+                # if self.config.neuron.auto_update and self.should_restart():
+                #     bt.logging.info(f"Validator is out of date, quitting to restart.")
+                #     self.update_and_restart()
+                #     #break
+                #     raise KeyboardInterrupt
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
