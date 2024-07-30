@@ -38,7 +38,7 @@ import time
 from subprocess import Popen, PIPE
 import subprocess
  
- 
+
 
 class BaseValidatorNeuron(BaseNeuron):
     """
@@ -207,8 +207,8 @@ class BaseValidatorNeuron(BaseNeuron):
                 if self.config.neuron.auto_update and self.should_restart():
                     bt.logging.info(f"Validator is out of date, quitting to restart.")
                     self.update_and_restart()
-                    break
-                    #raise KeyboardInterrupt
+                    #break
+                    raise KeyboardInterrupt
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
