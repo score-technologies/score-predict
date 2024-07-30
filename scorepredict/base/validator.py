@@ -90,7 +90,7 @@ class BaseValidatorNeuron(BaseNeuron):
         self.last_update_check = dt.datetime.now()
         self.update_check_interval = 2  # Check for updates every hour
 
-
+ 
     def serve_axon(self):
         """Serve axon to enable external connections."""
 
