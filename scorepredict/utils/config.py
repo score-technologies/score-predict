@@ -262,6 +262,12 @@ def add_validator_args(cls, parser):
         help="Whether to simulate time or not.",
         default=False,
     )    
+    parser.add_argument(
+        "--neuron.auto_update",
+        action="store_true",
+        help="Quits the validator if it is out of date.",
+        default=False,
+    )    
 
 
 def config(cls):

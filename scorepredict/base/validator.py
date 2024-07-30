@@ -33,6 +33,10 @@ from scorepredict.base.utils.weight_utils import process_weights_for_netuid, con
 from scorepredict.mock import MockDendrite
 from scorepredict.utils.config import add_validator_args
 
+import datetime as dt
+import time
+from subprocess import Popen, PIPE
+
 
 class BaseValidatorNeuron(BaseNeuron):
     """
@@ -83,6 +87,10 @@ class BaseValidatorNeuron(BaseNeuron):
         self.thread: Union[threading.Thread, None] = None
         self.lock = asyncio.Lock()
 
+        self.last_update_check = dt.datetime.now()
+        self.update_check_interval = 2  # Check for updates every hour
+
+
     def serve_axon(self):
         """Serve axon to enable external connections."""
 
@@ -107,6 +115,33 @@ class BaseValidatorNeuron(BaseNeuron):
                 f"Failed to create Axon initialize with exception: {e}"
             )
             pass
+
+    def is_git_latest(self) -> bool:
+        p = Popen(["git", "rev-parse", "HEAD"], stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if err:
+            return False
+        current_commit = out.decode().strip()
+        p = Popen(["git", "ls-remote", "origin", "HEAD"], stdout=PIPE, stderr=PIPE)
+        out, err = p.communicate()
+        if err:
+            return False
+        latest_commit = out.decode().split()[0]
+        bt.logging.info(
+            f"Current commit: {current_commit}, Latest commit: {latest_commit}"
+        )
+        return current_commit == latest_commit
+
+    def should_restart(self) -> bool:
+        # Check if enough time has elapsed since the last update check, if not assume we are up to date.
+        if (
+            dt.datetime.now() - self.last_update_check
+        ).seconds < self.update_check_interval:
+            return False
+
+        self.last_update_check = dt.datetime.now()
+
+        return not self.is_git_latest()
 
     async def concurrent_forward(self):
         coroutines = [
@@ -143,6 +178,7 @@ class BaseValidatorNeuron(BaseNeuron):
         # This loop maintains the validator's operations until intentionally stopped.
         try:
             while True:
+                start_time = time.time()
                 bt.logging.info(f"step({self.step}) block({self.block})")
 
                 # Run multiple forwards concurrently.
@@ -152,10 +188,21 @@ class BaseValidatorNeuron(BaseNeuron):
                 if self.should_exit:
                     break
 
+                if self.config.neuron.auto_update and self.should_restart():
+                    bt.logging.info(f"Validator is out of date, quitting to restart.")
+                    raise KeyboardInterrupt
+
                 # Sync metagraph and potentially set weights.
                 self.sync()
 
                 self.step += 1
+
+                # Sleep for the remaining time in the step.
+                elapsed = time.time() - start_time
+                if elapsed < self.config.neuron.timeout:
+                    sleep_time = self.config.neuron.timeout - elapsed
+                    bt.logging.info(f"Sleeping for {sleep_time} ...")
+                    #time.sleep(sleep_time)
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:

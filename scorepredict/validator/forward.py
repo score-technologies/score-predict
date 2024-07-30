@@ -61,11 +61,11 @@ async def forward(self):
         bt.logging.debug(f"UTC time: {datetime.utcnow()}")
     
     #current_time = datetime.now()
-    send_predictions_to_website(self)
+    
 
     if self.step % 10 == 0:
         bt.logging.debug(f"Send Predictions To Website - Step: {self.step}")
-        self.set_weights()
+        send_predictions_to_website(self)
 
     if self.step % 100 == 0:
         bt.logging.debug(f"Keeping Validators Busy - Step: {self.step}")
