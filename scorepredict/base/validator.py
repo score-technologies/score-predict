@@ -208,6 +208,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 #     self.update_and_restart()
                 #     #break
                 #     raise KeyboardInterrupt
+                
 
                 # Sync metagraph and potentially set weights.
                 self.sync()
