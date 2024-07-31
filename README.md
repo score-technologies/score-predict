@@ -144,10 +144,22 @@ To run a validator, use the following command:
 python neurons/validator.py --netuid 180 --subtensor.network test --wallet.name validator --wallet.hotkey default --neuron.vpermit_tao_limit 1
 ```
 
-or via pm2
+or via pm2 (highly recommended)
 
 ```bash
-pm2 start python --name validator -- neurons/validator.py --netuid 180 --subtensor.network test --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME --neuron.vpermit_tao_limit 1
+pm2 start python --name validator -- \
+   neurons/validator.py \
+   --netuid 180 \
+   --subtensor.network test \
+   --wallet.name YOUR_WALLET_NAME \
+   --wallet.hotkey YOUR_HOTKEY_NAME \
+   --neuron.vpermit_tao_limit 1
+```
+
+And then we recommend starting another pm2 auto update process. Where `validator` is the name of your validator pm2 process.
+
+```bash
+pm2 start validator_auto_update.sh --name validator-updater --interpreter bash -- validator
 ```
 
 Note – on Testnet we are using a very low vpermit_tao_limit of 1 for testing validators with a low stake.
