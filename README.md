@@ -44,7 +44,7 @@ Currently, the validator will serve challenges with all competitive games from t
 
 ### Score Predict App
 
-We have developed a front-end to which acts as another miner, collecting predictions from fans using intuition rather than machine learning. Users can sign up and make their predictions on upcoming games. The consensus of preidcitons for each match becomes the submissions for it's single miner. TAO rewards earned by the miner will be distrubited to the end users through a points program with weekly giveaways of vouchers and tech.
+We have developed a front-end to which acts as another miner, collecting predictions from fans using intuition rather than machine learning. Users can sign up and make their predictions on upcoming games. The consensus of predictions for each match becomes the submissions for it's single miner. TAO rewards earned by the miner will be distrubited to the end users through a points program with weekly giveaways of vouchers and tech.
 
 To use the app, visit [app.scorepredict.io](https://app.scorepredict.io/)
 
@@ -72,10 +72,20 @@ Miners will only recieve challenges for a match from a single validator. Therefo
 ### Prerequisites
 
 - Python 3.8+
-- Bittensor 7.2.0
 - pm2 (optional but recommended)
+- Pip
 
 ### Installation
+
+0. Set up environment
+   We suggest Ubuntu 24.04, and using a virtual env for python requirements.
+
+```bash
+sudo apt-get pip
+apt install python3.12-venv
+python3 -m venv venv
+source venv/bin/activate
+```
 
 1. Clone the repository:
 
@@ -90,6 +100,15 @@ cd score-predict
 pip install -r requirements.txt
 ```
 
+On Testnet, currently require a manual patch to bittensor
+
+```bash
+git clone https://github.com/opentensor/bittensor.git
+cd bittensor
+git checkout release/7.2.1
+pip install -e .
+```
+
 3. Set up:
 
 ```bash
@@ -102,7 +121,7 @@ Currently live on testnet subnet 180
 
 ## Mining
 
-Miners are responsible for generating predictions for upcoming football matches. The base miner model is a . Currently miners are asked to predict the winner of a match, or a draw, and the score. In the future we will start to include more in-game events for miners to predict, such as half time score, number of red or yellow cards, number of corners, first goal scored by which player etc.
+Miners are responsible for generating predictions for upcoming football matches. The base miner model is a Random Forest classifier trained on historical football match data. Currently miners are asked to predict the winner of a match, or a draw. In the future we will start to include more in-game events for miners to predict, such as score, half time score, number of red or yellow cards, number of corners, first goal scored by which player etc.
 
 ### Running a Miner
 
@@ -195,11 +214,11 @@ This scoring logic encourages consistent accuracy and will become more complex a
 
 ### Centralised API
 
-We've made the decision to initilally centralise the API which is used to fetch matches and results. This is to reduce the friction for our Validators. In the future, we would look to deentralise this.
+We've made the decision to initilally centralise the API which is used to fetch matches and results. This is to reduce the friction for our Validators. In the future, we would look to de-centralise this.
 
 ### Protocol Code Overview
 
-- **`scorepredict/protocol.py`**: Defines the `Prediction` class, which represents a prediction request. It includes fields for match ID, home team, away team, match date, deadline, and predicted winner
+- **`scorepredict/protocol.py`**: Defines the `Prediction` class, which represents a prediction request. It includes fields for match ID, home team, away team, match date, deadline, and predicted winner.
 
 ## Flow
 
