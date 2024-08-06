@@ -65,7 +65,7 @@ async def forward(self):
 
     if self.step % 10 == 0:
         bt.logging.debug(f"Send Predictions To Website - Step: {self.step}")
-        send_predictions_to_website(self)
+        #send_predictions_to_website(self) TODO turn back on
 
     if self.step % 100 == 0:
         bt.logging.debug(f"Keeping Validators Busy - Step: {self.step}")

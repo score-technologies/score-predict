@@ -220,7 +220,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 if elapsed < self.config.neuron.timeout:
                     sleep_time = self.config.neuron.timeout - elapsed
                     bt.logging.info(f"Sleeping for {sleep_time} ...")
-                    time.sleep(sleep_time)
+                    #time.sleep(sleep_time) TODO change back
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:
@@ -383,41 +383,31 @@ class BaseValidatorNeuron(BaseNeuron):
 
     def update_scores(self, rewards: np.ndarray, uids: List[int]):
         """
-        Performs exponential moving average on the scores based on the rewards received from the miners.
+        Updates the scores for the miners that were queried in this round.
+        Does not affect scores of miners that weren't part of this validation.
         
-        Modified to allow for multiple of the same uid to be passed 
-
+        Args:
+            rewards (np.ndarray): Array of rewards for the queried miners.
+            uids (List[int]): List of UIDs corresponding to the rewards.
         """
-
         # Check if rewards contains NaN values.
         if np.isnan(rewards).any():
             bt.logging.warning(f"NaN values detected in rewards: {rewards}")
-            # Replace any NaN values in rewards with 0.
             rewards = np.nan_to_num(rewards, nan=0)
 
         # Create a dictionary to store the sum of rewards for each unique UID
         uid_rewards = {}
         for uid, reward in zip(uids, rewards):
-            if uid in uid_rewards:
-                uid_rewards[uid] += reward
-            else:
-                uid_rewards[uid] = reward
+            uid_rewards[uid] = uid_rewards.get(uid, 0) + reward
 
-        # Create a scattered_rewards array with the same shape as self.scores
-        scattered_rewards: np.ndarray = np.zeros_like(self.scores)
-
-        # Update the scattered_rewards array with the summed rewards for each UID
-        for uid, reward_sum in uid_rewards.items():
-            scattered_rewards[uid] = reward_sum
-
-        bt.logging.debug("scattered_rewards", scattered_rewards)
-        bt.logging.debug("scattered_reward_uids", str(self.metagraph.uids.tolist()))
-
-        # Update scores with rewards produced by this step.
-        # shape: [ metagraph.n ]
+        bt.logging.debug(f"uid_rewards: {uid_rewards}")
+        # Update scores only for the UIDs that were part of this validation round
         alpha: float = self.config.neuron.moving_average_alpha
-        self.scores: np.ndarray = alpha * scattered_rewards + (1 - alpha) * self.scores
-        bt.logging.debug(f"Updated moving avg scores: {self.scores}")
+        for uid, reward_sum in uid_rewards.items():
+            self.scores[uid] = alpha * reward_sum + (1 - alpha) * self.scores[uid]
+
+        bt.logging.debug(f"Updated scores for UIDs: {list(uid_rewards.keys())}")
+        bt.logging.debug(f"New scores for updated UIDs: {[self.scores[uid] for uid in uid_rewards]}")
 
     def save_state(self):
         """Saves the state of the validator to a file."""

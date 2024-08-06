@@ -3,6 +3,8 @@ import pandas as pd
 import numpy as np
 from joblib import load
 from datetime import datetime, timedelta
+import numpy as np
+from sklearn.preprocessing import StandardScaler
 
 class FootballPredictor:
     def __init__(self):
@@ -24,6 +26,7 @@ class FootballPredictor:
 
         # Load the dataset
         self.df = pd.read_csv(dataset_path)
+        self.random_state = np.random.RandomState()
 
     def get_team_stats(self, team, date):
         team_matches = self.df[(self.df['Home Team'] == team) | (self.df['Away Team'] == team)]
@@ -95,16 +98,20 @@ class FootballPredictor:
             'Is_Weekend'
         ]
         
+        
         # Convert features to DataFrame with appropriate feature names
         X = pd.DataFrame([features], columns=feature_names)
         
         # Impute and scale the features
         X_imputed = self.imputer.transform(X)
         X_scaled = self.scaler.transform(X_imputed)
+
+        # Get probabilities instead of just the class
+        probabilities = self.model.predict_proba(X_scaled)[0]
         
-        # Predict and decode the result
-        prediction = self.model.predict(X_scaled)
-        predicted_result = self.le.inverse_transform(prediction)[0]
+        # Use probabilities to make a weighted random choice
+        classes = self.le.classes_
+        predicted_result = self.random_state.choice(classes, p=probabilities)
         
         # Map the prediction to the actual team names or "DRAW"
         if predicted_result == 'HOME_TEAM':

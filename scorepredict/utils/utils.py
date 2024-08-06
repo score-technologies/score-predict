@@ -71,7 +71,7 @@ def send_predictions_to_website(self):
     ''')
     unsent_predictions = c.fetchall()
 
-    api_url = "https://predict-app-rho.vercel.app/api/predictions" #TODO change to new domain
+    api_url = "https://app.scorepredict.io/api/predictions" 
 
     for miner_uid, match_id, prediction, timestamp, reward in unsent_predictions:
         payload = {
@@ -264,15 +264,15 @@ def get_random_uids(
 def get_current_epoch(self):
     """
     Calculate the current epoch based on the current block number.
-    An epoch is defined as the ceiling of the division of the current block number by 360.
+    An epoch is defined as the ceiling of the division of the current block number by 3600.
+    This results in epochs changing roughly twice a day.
 
     Returns:
         int: The current epoch number.
     """
     try:
-        current_block = self.subtensor.get_current_block()  
-        # TODO find actual block rather than this method
-        current_epoch = math.ceil(current_block / 360)
+        current_block = self.subtensor.get_current_block()
+        current_epoch = math.ceil(current_block / 3600)
         bt.logging.info(f"Current block: {current_block}, Current epoch: {current_epoch}")
         return current_epoch
     except Exception as e:
@@ -393,23 +393,12 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
 
 def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     """
-    Assigns upcoming matches to validators based on their current stake. Higher stake gets more matches to send to miners.
-
-    The distribution criteria include:
-        - Validator's stake: Validators with a higher stake will receive more matches as they have more at risk in the network.
-        - Validator's past performance: Validators with a history of accurate predictions and timely responses may be prioritized.
-
-    Steps involved:
-        1. Retrieve a list of all available validators with their current stake and performance metrics.
-        2. Fetch the list of upcoming matches that need to be assigned.
-        3. Distribute matches to validators based on the criteria mentioned above, ensuring an even and fair distribution.
-
+    Assigns miners to validators based on validators' stake, then assigns all matches to these miners.
+    The assignment is deterministic and consistent across all validators for a given epoch.
+    
     Returns:
-        dict: A dictionary mapping miner UIDs to their assigned challenges for the current validator.
-
-    Raises:
-        Exception: If there are no available validators or matches, or if an error occurs during the assignment process.
-    """    
+        dict: A dictionary mapping miner UIDs to their assigned matches for the current validator.
+    """
     # Retrieve validator UIDs and their stake amounts
     validator_shares = get_validators_and_shares(self, self.config.neuron.vpermit_tao_limit)
     
@@ -420,7 +409,7 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     # Sort validators based on stake amounts in descending order
     sorted_validators = sorted(validator_shares.items(), key=lambda x: x[1], reverse=True)
     
-    # Retrieve upcoming matches for today as a dictionary with match IDs as keys
+    # Retrieve upcoming matches for today
     target_date = get_current_time(self)
     matches_dict = get_matches(self, date_str=target_date, minutes_before_kickoff=minutes_before_kickoff)
 
@@ -432,56 +421,42 @@ def assign_challenges_to_validators(self, minutes_before_kickoff: int = 60):
     miner_uids = get_all_miners(self)
     bt.logging.info(f"⛏️ Miner UIDs: {miner_uids}")
     
-    # Assign matches to validators
+    # Create a deterministic ordering of miners
+    block_hash = get_current_epoch(self)
+    miner_seed = f"{block_hash}_miners"
+    pyrandom.seed(miner_seed)
+    shuffled_miners = miner_uids.copy()
+    pyrandom.shuffle(shuffled_miners)
+
+    # Assign miners to validators deterministically
+    validator_miners = {}
+    miner_index = 0
+    total_stake = sum(stake for _, stake in sorted_validators)
+    
+    for validator_uid, stake in sorted_validators:
+        # Calculate number of miners for this validator based on stake
+        num_miners = max(1, int((stake / total_stake) * len(shuffled_miners)))
+        validator_miners[validator_uid] = []
+        
+        for _ in range(num_miners):
+            if miner_index < len(shuffled_miners):
+                validator_miners[validator_uid].append(shuffled_miners[miner_index])
+                miner_index += 1
+            else:
+                break  # All miners have been assigned
+
+    # Assign all matches to each validator's miners
     validator_challenges = {}
-    match_ids = list(matches_dict.keys())
-    match_index = 0
-    
-    for validator_uid, _ in sorted_validators:
-        if match_index >= len(match_ids):
-            break
-        
-        validator_challenges[validator_uid] = {}
-        
-        # Assign one match to each validator
-        assigned_match_id = match_ids[match_index]
-        validator_challenges[validator_uid][assigned_match_id] = matches_dict[assigned_match_id]
-        match_index += 1
-    
-    # Distribute remaining matches
-    while match_index < len(match_ids):
-        for validator_uid, _ in sorted_validators:
-            if match_index >= len(match_ids):
-                break
-            assigned_match_id = match_ids[match_index]
-            validator_challenges[validator_uid][assigned_match_id] = matches_dict[assigned_match_id]
-            match_index += 1
-    
-    # Assign challenges to miners for each validator
-    for validator_uid in validator_challenges:
-        miner_challenges = {}
-        validator_matches = list(validator_challenges[validator_uid].keys())
-        
-        for miner_uid in miner_uids:
-            block_hash = get_current_epoch(self)
-            seed = f"{block_hash}_{miner_uid}"
-            pyrandom.seed(seed)
-            
-            pyrandom.shuffle(validator_matches)
-            miner_challenges[miner_uid] = [
-                (match_id, matches_dict[match_id])
-                for match_id in validator_matches
-            ]
-        
-        validator_challenges[validator_uid] = miner_challenges
+    for validator_uid, assigned_miners in validator_miners.items():
+        validator_challenges[validator_uid] = {
+            miner_uid: list(matches_dict.items()) for miner_uid in assigned_miners
+        }
     
     bt.logging.debug(f"Validator challenges: {validator_challenges}")
     bt.logging.debug(f"My UID: {self.uid}")
     
-    # Filter challenges for the current validator
-    current_validator_challenges = validator_challenges.get(self.uid, {})
-    
-    return current_validator_challenges
+    # Return challenges for the current validator
+    return validator_challenges.get(self.uid, {})
 
 def get_all_validators_vtrust(
     self,
