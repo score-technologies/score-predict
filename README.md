@@ -8,7 +8,7 @@
 
 ## Predict Football Outcomes and Earn
 
-[Score Predict](http://www.scorepredict.io) •[Discord](https://discord.gg/bittensor) • [Network](https://taostats.io/) • [Bittensor](https://bittensor.com/whitepaper)
+[Score Predict](http://www.scorepredict.io) •[Score Discord](https://discord.gg/SRA2UF2p) • [Network](https://taostats.io/) • [Bittensor](https://bittensor.com/whitepaper)
 
 </div>
 
@@ -25,6 +25,11 @@
 ## Introduction
 
 Score Predict is a Bittensor subnet designed to incentivize accurate football (soccer) match predictions. The subnet consists of miners who generate predictions and validators who score these predictions based on actual match outcomes. The validators then set on-chain weights to reward accurate predictions.
+
+| Environment | Netuid |
+| ----------- | -----: |
+| Mainnet     |     44 |
+| Testnet     |    180 |
 
 ## Key Features
 
@@ -54,28 +59,57 @@ There is a leaderboard which ranks each participant on the network, including th
 
 For more details and to view the leaderboard, visit [app.scorepredict.io/leaderboard](https://app.scorepredict.io/leaderboard)
 
-### Anti-sybill
-
-Miners will only recieve challenges for a match from a single validator. Therefore they cannot hedge with multiple bets on the same match.
-
 ## Key Points:
 
 1. The validators fetch games kicking off in the next 60 minutes
-2. They use a hash of the epoch and miner_uids to break up the challenges based on the validators stake
+2. They use a hash of the epoch and miner_uids to allocate challenges based on the validators stake
 3. Challenges are served to miners
 4. Miners have 12 seconds to respond
 5. Finished matches from the previous day are fetched from an API, and checked against store submissions
 6. When there is a match, scoring is done, weights are set and submission is removed
 
-## Setup
+## Quickstart
+
+### Validator
+
+To quickly start a Validator, create an Ubuntu server and execute the following command from your local machine where your wallet files are stored. We recommend setting up SSH key authentication first.
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/score-protocol/score-predict/main/install_validator.sh | bash -s - SSH_DESTINATION HOTKEY_PATH
+```
+
+Replace SSH_DESTINATION with your server's connection info (i.e. username@1.2.3.4) and HOTKEY_PATH with the path of your hotkey (i.e. ~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey). This script installs necessary tools in the server, copies the keys and starts the both the validator with default config and an auto-update fuction.
+
+If you want to change the default config, see below for instrucitons on running the Validator manually.
+
+### Miner
+
+To quickly start a Miner, create an Ubuntu server and execute the following command from your local machine where your wallet files are stored. We recommend setting up SSH key authentication first.
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/score-protocol/score-predict/main/install_miner.sh | bash -s - SSH_DESTINATION HOTKEY_PATH
+```
+
+Replace SSH_DESTINATION with your server's connection info (i.e. username@1.2.3.4) and HOTKEY_PATH with the path of your hotkey (i.e. ~/.bittensor/wallets/my-wallet/hotkeys/my-hotkey). This script installs necessary tools in the server, copies the keys and starts the included base miner.
+
+If you want to change the default config, see below for instrucitons on running the Miner manually.
+
+## Manual Installation
+
+**IMPORTANT**
+
+Before attempting to register on mainnet, we strongly recommend that you run a validator on the testnet. For that matter ensure you add the appropriate testnet flag `--subtensor.network test`.
+
+| Environment | Netuid |
+| ----------- | -----: |
+| Mainnet     |     44 |
+| Testnet     |    180 |
 
 ### Prerequisites
 
 - Python 3.8+
 - pm2 (optional but recommended)
 - Pip
-
-### Installation
 
 0. Set up environment
    We suggest Ubuntu 24.04, and using a virtual env for python requirements.
@@ -115,33 +149,29 @@ pip install -e .
 export PYTHONPATH="/path/to/score-predict:$PYTHONPATH"
 ```
 
-### Testnet
-
-Currently live on testnet subnet 180
-
-## Mining
+### Mining
 
 Miners are responsible for generating predictions for upcoming football matches. The base miner model is a Random Forest classifier trained on historical football match data. Currently miners are asked to predict the winner of a match, or a draw. In the future we will start to include more in-game events for miners to predict, such as score, half time score, number of red or yellow cards, number of corners, first goal scored by which player etc.
 
-### Running a Miner
+#### Running a Miner
 
 To run a miner, use the following command:
 
 ```bash
-python neurons/miner.py --netuid 180 --logging.debug --logging.trace --subtensor.network test --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME
+python neurons/miner.py --netuid 44 --logging.trace --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME
 ```
 
 or via pm2
 
 ```bash
-pm2 start python --name miner -- neurons/miner.py --netuid 180 --subtensor.network test --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME --axon.port 8089
+pm2 start python --name miner -- neurons/miner.py --netuid 44 --wallet.name YOUR_WALLET_NAME --wallet.hotkey YOUR_HOTKEY_NAME --axon.port 8089
 ```
 
-### Miner Code Overview
+#### Miner Code Overview
 
 - **`neurons/miner.py`**: Defines the `Miner` class, which inherits from `BaseMinerNeuron`. The `forward` method generates predictions using the OpenAI GPT model.
 
-### Current Base Model
+#### Current Base Model
 
 The base miner model is a Random Forest classifier trained on historical football match data. This model:
 
@@ -151,16 +181,16 @@ The base miner model is a Random Forest classifier trained on historical footbal
 
 While this provides a solid foundation, we are working on further improvements to the base model. However, we expect most miners to bring their own fine-tuned models for more accurate predictions.
 
-## Validating
+### Validating
 
 Validators are responsible for providing challenges in the form of upcoming matches to the miners, then scoring the predictions generated. They fetch matchs from Score API to create the challenges as well as compare the results with the miners predictions to assign rewards.
 
-### Running a Validator
+#### Running a Validator
 
 To run a validator, use the following command:
 
 ```bash
-python neurons/validator.py --netuid 180 --subtensor.network test --wallet.name validator --wallet.hotkey default --neuron.vpermit_tao_limit 1
+python neurons/validator.py --netuid 44 --wallet.name validator --wallet.hotkey default
 ```
 
 or via pm2 (highly recommended)
@@ -168,11 +198,9 @@ or via pm2 (highly recommended)
 ```bash
 pm2 start python --name validator -- \
    neurons/validator.py \
-   --netuid 180 \
-   --subtensor.network test \
+   --netuid 44 \
    --wallet.name YOUR_WALLET_NAME \
-   --wallet.hotkey YOUR_HOTKEY_NAME \
-   --neuron.vpermit_tao_limit 1
+   --wallet.hotkey YOUR_HOTKEY_NAME
 ```
 
 And then we recommend starting another pm2 auto update process. Where `validator` is the name of your validator pm2 process.
@@ -183,7 +211,7 @@ pm2 start validator_auto_update.sh --name validator-updater --interpreter bash -
 
 Note – on Testnet we are using a very low vpermit_tao_limit of 1 for testing validators with a low stake.
 
-### Validator Code Overview
+#### Validator Code Overview
 
 - **`scorepredict/base/validator.py`**: Defines the `BaseValidatorNeuron` class, which handles the main loop for the validator, including syncing with the network and setting weights.
 - **`scorepredict/validator/forward.py`**: Contains the `forward` method, which fetches upcoming matches, sends prediction requests to miners, and processes their responses.

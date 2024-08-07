@@ -58,17 +58,17 @@ source venv/bin/activate
 # Install requirements
 pip install -r requirements.txt
 
-# Manual patch for bittensor
-cd ..
-git clone https://github.com/opentensor/bittensor.git
-cd bittensor
-git checkout release/7.2.1
-pip install -e .
-cd ../score-predict
+# Manual patch for bittensor testnet
+# cd ..
+# git clone https://github.com/opentensor/bittensor.git
+# cd bittensor
+# git checkout release/7.3.1
+# pip install -e .
+# cd ../score-predict
 
 # Set up PYTHONPATH
-echo "export PYTHONPATH=\"\$REMOTE_PYTHONPATH\"" >> ~/.bashrc
-source ~/.bashrc
+# echo "export PYTHONPATH=\"\$REMOTE_PYTHONPATH\"" >> ~/.bashrc
+# source ~/.bashrc
 
 # Install pm2
 sudo apt-get install -y nodejs npm
@@ -79,7 +79,7 @@ cat > start_validator.sh <<EOF
 #!/bin/bash
 source \$HOME/score-predict/venv/bin/activate
 export PYTHONPATH="\$REMOTE_PYTHONPATH"
-python neurons/validator.py --netuid 180 --subtensor.network test --wallet.name $WALLET_NAME --wallet.hotkey $HOTKEY_NAME --neuron.vpermit_tao_limit 1
+python neurons/validator.py --netuid 44 --wallet.name $WALLET_NAME --wallet.hotkey $HOTKEY_NAME
 EOF
 
 chmod +x start_validator.sh

@@ -120,13 +120,3 @@ class FootballPredictor:
             return away_team
         else:
             return 'DRAW'
-
-# Example usage (can be commented out or removed when used as a module)
-# if __name__ == "__main__":
-#     predictor = FootballPredictor()
-#     home_team = "AFC Bournemouth"
-#     away_team = "Aston Villa FC"
-#     date = "2024-07-13"
-
-#     result = predictor.predict_winner(home_team, away_team, date)
-#     print(f"Predicted result: {result}")
