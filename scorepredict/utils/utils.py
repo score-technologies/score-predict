@@ -46,6 +46,15 @@ def send_predictions_to_website(self):
     Checks for predictions in the database, sends them to the website API,
     and updates the 'sentWebsite' field in the database.
     """
+
+    bt.logging.debug(f"Netuid: {self.config.netuid}")
+
+        # Check if running on mainnet
+    if self.config.netuid != 44:
+        bt.logging.info("Not running on mainnet. Skipping sending predictions to website.")
+        return
+
+
     db_name = f'predictions-{self.uid}.db'
     conn = sqlite3.connect(db_name)
     c = conn.cursor()

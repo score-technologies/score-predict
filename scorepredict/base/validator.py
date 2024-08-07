@@ -202,14 +202,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 # Check if we should exit.
                 if self.should_exit:
                     break
-
-                # if self.config.neuron.auto_update and self.should_restart():
-                #     bt.logging.info(f"Validator is out of date, quitting to restart.")
-                #     self.update_and_restart()
-                #     #break
-                #     raise KeyboardInterrupt
                 
-
                 # Sync metagraph and potentially set weights.
                 self.sync()
 
@@ -220,7 +213,7 @@ class BaseValidatorNeuron(BaseNeuron):
                 if elapsed < self.config.neuron.timeout:
                     sleep_time = self.config.neuron.timeout - elapsed
                     bt.logging.info(f"Sleeping for {sleep_time} ...")
-                    #time.sleep(sleep_time) TODO change back
+                    time.sleep(sleep_time)
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:
