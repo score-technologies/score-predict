@@ -340,9 +340,13 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
         Exception: If the API call fails or returns an unexpected response.
     """
     API_KEY = os.getenv('FOOTBALL_API_KEY')
+
     if self.config.score_api == True:
-        url = 'http://api.scorepredict.io/matches'
-        bt.logging.debug("Using score API")
+        if self.config.simulate_time:
+            url = 'http://api.scorepredict.io/test'
+        else:
+            url = 'http://api.scorepredict.io/matches'
+        bt.logging.debug(f"Using score API: {url}")
     else:
         url = 'https://api.football-data.org/v4/matches'
     headers = {'X-Auth-Token': API_KEY}

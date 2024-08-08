@@ -259,7 +259,7 @@ def add_validator_args(cls, parser):
     parser.add_argument(
         "--simulate_time",
         action="store_true",
-        help="Whether to simulate time or not.",
+        help="Whether to simulate time or not. Do not use in production. Validator will be severly penalised for this.",
         default=False,
     )    
     parser.add_argument(
@@ -268,6 +268,7 @@ def add_validator_args(cls, parser):
         help="Quits the validator if it is out of date.",
         default=False,
     )    
+     
 
 
 def config(cls):
