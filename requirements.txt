@@ -8,4 +8,4 @@ pydantic
 wandb
 python-dotenv
 joblib==1.2.0
-scikit-learn==1.2.2 --only-binary=scikit-learn==1.2.2
+scikit-learn --only-binary=scikit-learn

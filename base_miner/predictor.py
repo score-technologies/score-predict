@@ -2,118 +2,168 @@ import os
 import pandas as pd
 import numpy as np
 from joblib import load
-from datetime import datetime, timedelta
-import numpy as np
-from sklearn.preprocessing import StandardScaler
+from datetime import datetime
+import pytz
 
 class FootballPredictor:
     def __init__(self):
-        # Get the directory of the current script
         base_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # Construct absolute paths for the model files
-        model_path = os.path.join(base_dir, 'model/random_forest_model.joblib')
-        imputer_path = os.path.join(base_dir, 'model/imputer.joblib')
-        scaler_path = os.path.join(base_dir, 'model/feature_scaler.joblib')
-        le_path = os.path.join(base_dir, 'model/label_encoder.joblib')
-        dataset_path = os.path.join(base_dir, 'model/soccer_matches_with_features.csv')
-        
         # Load the saved models and transformers
-        self.model = load(model_path)
-        self.imputer = load(imputer_path)
-        self.scaler = load(scaler_path)
-        self.le = load(le_path)
+        self.model = load(os.path.join(base_dir, 'model/random_forest_model.joblib'))
+        self.imputer = load(os.path.join(base_dir, 'model/imputer.joblib'))
+        self.scaler = load(os.path.join(base_dir, 'model/feature_scaler.joblib'))
+        self.le = load(os.path.join(base_dir, 'model/label_encoder.joblib'))
 
         # Load the dataset
-        self.df = pd.read_csv(dataset_path)
-        self.random_state = np.random.RandomState()
+        self.df = pd.read_csv(os.path.join(base_dir, 'model/football-features.csv'))
+        self.df['Date'] = pd.to_datetime(self.df['Date'], utc=True)
+        self.df['Season Start'] = pd.to_datetime(self.df['Season Start'], utc=True)
+        self.df['Season End'] = pd.to_datetime(self.df['Season End'], utc=True)
 
-    def get_team_stats(self, team, date):
+    def get_competition(self, home_team, away_team, match_date):
+        recent_match = self.df[((self.df['Home Team'] == home_team) | (self.df['Away Team'] == home_team) |
+                           (self.df['Home Team'] == away_team) | (self.df['Away Team'] == away_team)) &
+                          (self.df['Date'] < match_date)].sort_values('Date', ascending=False).iloc[0]
+        return recent_match['Competition']
+
+    def get_league_positions(self, date, season_start, season_end, competition):
+        season_matches = self.df[(self.df['Date'] >= season_start) & 
+                            (self.df['Date'] <= date) & 
+                            (self.df['Date'] <= season_end) & 
+                            (self.df['Competition'] == competition)]
+        
+        team_points = {}
+        for _, match in season_matches.iterrows():
+            home_team, away_team = match['Home Team'], match['Away Team']
+            if match['Winner'] == 'HOME_TEAM':
+                team_points[home_team] = team_points.get(home_team, 0) + 3
+            elif match['Winner'] == 'AWAY_TEAM':
+                team_points[away_team] = team_points.get(away_team, 0) + 3
+            else:
+                team_points[home_team] = team_points.get(home_team, 0) + 1
+                team_points[away_team] = team_points.get(away_team, 0) + 1
+        
+        sorted_teams = sorted(team_points.items(), key=lambda x: x[1], reverse=True)
+        positions = {team: pos+1 for pos, (team, _) in enumerate(sorted_teams)}
+        
+        default_position = len(positions) + 1 if positions else 1
+        
+        return lambda team: positions.get(team, default_position)
+
+    def get_team_stats(self, team, date, competition):
+        if date.tzinfo is None:
+            date = date.replace(tzinfo=pytz.UTC)
+        
         team_matches = self.df[(self.df['Home Team'] == team) | (self.df['Away Team'] == team)]
-        team_matches = team_matches[team_matches['Date'] < date]
-        team_matches = team_matches.sort_values('Date', ascending=False).head(5)
+        team_matches = team_matches[team_matches['Date'] < date].sort_values('Date', ascending=False).head(5)
         
-        if team_matches.empty:
-            return 0, 0, 0, 365  # Default: 0 wins, 0 goals scored/conceded, 365 days since last match
+        last5_wins = sum(
+            ((team_matches['Home Team'] == team) & (team_matches['Winner'] == 'HOME_TEAM')) |
+            ((team_matches['Away Team'] == team) & (team_matches['Winner'] == 'AWAY_TEAM'))
+        )
         
-        wins = sum((team_matches['Home Team'] == team) & (team_matches['Winner'] == 'HOME_TEAM') | 
-                   (team_matches['Away Team'] == team) & (team_matches['Winner'] == 'AWAY_TEAM'))
+        h2h_matches = self.df[((self.df['Home Team'] == team) & (self.df['Away Team'] == team)) | ((self.df['Away Team'] == team) & (self.df['Home Team'] == team))]
+        h2h_matches = h2h_matches[h2h_matches['Date'] < date].sort_values('Date', ascending=False).head(5)
         
-        goals_scored = sum(team_matches[team_matches['Home Team'] == team]['Full Time Home']) + \
-                       sum(team_matches[team_matches['Away Team'] == team]['Full Time Away'])
+        h2h_wins = sum(
+            ((h2h_matches['Home Team'] == team) & (h2h_matches['Winner'] == 'HOME_TEAM')) |
+            ((h2h_matches['Away Team'] == team) & (h2h_matches['Winner'] == 'AWAY_TEAM'))
+        )
+        h2h_win_ratio = h2h_wins / len(h2h_matches) if len(h2h_matches) > 0 else 0
+        h2h_avg_goals = (h2h_matches['Full Time Home'] + h2h_matches['Full Time Away']).mean() if len(h2h_matches) > 0 else 0
         
-        goals_conceded = sum(team_matches[team_matches['Home Team'] == team]['Full Time Away']) + \
-                         sum(team_matches[team_matches['Away Team'] == team]['Full Time Home'])
+        days_since_last_match = (date - team_matches['Date'].iloc[0]).days if not team_matches.empty else 30
         
-        days_since_last_match = (datetime.strptime(date, '%Y-%m-%d') - 
-                                 datetime.strptime(team_matches.iloc[0]['Date'][:10], '%Y-%m-%d')).days
+        form = sum(team_matches['Winner'].map({'HOME_TEAM': 3, 'AWAY_TEAM': 0, 'DRAW': 1}))
         
-        return wins, goals_scored, goals_conceded, days_since_last_match
+        streak = 0
+        for _, match in team_matches.iterrows():
+            if (match['Home Team'] == team and match['Winner'] == 'HOME_TEAM') or (match['Away Team'] == team and match['Winner'] == 'AWAY_TEAM'):
+                streak += 1
+            elif (match['Home Team'] == team and match['Winner'] == 'AWAY_TEAM') or (match['Away Team'] == team and match['Winner'] == 'HOME_TEAM'):
+                streak -= 1
+            else:
+                break
+        
+        performance = last5_wins / len(team_matches) if len(team_matches) > 0 else 0
+        
+        return {
+            'last5_wins': last5_wins,
+            'h2h_win_ratio': h2h_win_ratio,
+            'h2h_avg_goals': h2h_avg_goals,
+            'days_since_last_match': days_since_last_match,
+            'form': form,
+            'streak': streak,
+            'performance': performance
+        }
 
-    def get_h2h_stats(self, home_team, away_team, date):
-        h2h_matches = self.df[((self.df['Home Team'] == home_team) & (self.df['Away Team'] == away_team)) | 
-                         ((self.df['Home Team'] == away_team) & (self.df['Away Team'] == home_team))]
-        h2h_matches = h2h_matches[h2h_matches['Date'] < date]
-        
-        total_matches = len(h2h_matches)
-        if total_matches == 0:
-            return 0.5, 0  # Default values if no H2H matches
-        
-        home_wins = sum((h2h_matches['Home Team'] == home_team) & (h2h_matches['Winner'] == 'HOME_TEAM') | 
-                        (h2h_matches['Away Team'] == home_team) & (h2h_matches['Winner'] == 'AWAY_TEAM'))
-        
-        home_win_ratio = home_wins / total_matches
-        avg_goals = (h2h_matches['Full Time Home'] + h2h_matches['Full Time Away']).mean()
-        
-        return home_win_ratio, avg_goals
+    def predict_winner(self, home_team, away_team, match_date):
+        # Convert match_date to datetime if it's a string
+        if isinstance(match_date, str):
+            try:
+                match_date = datetime.strptime(match_date, "%Y-%m-%d %H:%M:%S").replace(tzinfo=pytz.UTC)
+            except ValueError:
+                try:
+                    match_date = datetime.strptime(match_date, "%Y-%m-%d").replace(tzinfo=pytz.UTC)
+                except ValueError:
+                    raise ValueError("Invalid date format. Use 'YYYY-MM-DD HH:MM:SS' or 'YYYY-MM-DD'")
 
-    def is_weekend(self, date):
-        return datetime.strptime(date, '%Y-%m-%d').weekday() >= 5
+        # Ensure match_date is timezone-aware
+        if match_date.tzinfo is None:
+            match_date = match_date.replace(tzinfo=pytz.UTC)
 
-    def get_league_positions(self, home_team, away_team, date):
-        home_pos = self.df[self.df['Home Team'] == home_team]['Home_League_Pos'].mean()
-        away_pos = self.df[self.df['Away Team'] == away_team]['Away_League_Pos'].mean()
-        return home_pos, away_pos
-
-    def predict_winner(self, home_team, away_team, date):
-        home_stats = self.get_team_stats(home_team, date)
-        away_stats = self.get_team_stats(away_team, date)
-        h2h_stats = self.get_h2h_stats(home_team, away_team, date)
-        home_pos, away_pos = self.get_league_positions(home_team, away_team, date)
+        competition = self.get_competition(home_team, away_team, match_date)
         
-        features = [
-            home_stats[0], home_stats[1], home_stats[2],  # Home team stats
-            away_stats[0], away_stats[1], away_stats[2],  # Away team stats
-            h2h_stats[0], h2h_stats[1],                   # H2H stats
-            home_stats[3], away_stats[3],                 # Days since last match
-            home_pos, away_pos, home_pos - away_pos,      # League positions
-            int(self.is_weekend(date))                    # Is weekend
-        ]
+        home_stats = self.get_team_stats(home_team, match_date, competition)
+        away_stats = self.get_team_stats(away_team, match_date, competition)
+        
+        season_info = self.df[(self.df['Competition'] == competition) & (self.df['Date'] <= match_date)].iloc[-1]
+        season_start = season_info['Season Start']
+        season_end = season_info['Season End']
+        
+        get_positions = self.get_league_positions(match_date, season_start, season_end, competition)
+        home_league_pos = get_positions(home_team)
+        away_league_pos = get_positions(away_team)
+        
+        total_days = (season_end - season_start).total_seconds() / (24 * 3600)
+        days_passed = (match_date - season_start).total_seconds() / (24 * 3600)
+        season_progress = days_passed / total_days if total_days > 0 else 0
         
         feature_names = [
-            'Home_Last5_Wins', 'Home_Last5_Goals_Scored', 'Home_Last5_Goals_Conceded',
-            'Away_Last5_Wins', 'Away_Last5_Goals_Scored', 'Away_Last5_Goals_Conceded',
+            'Home_Last5_Wins', 'Away_Last5_Wins',
             'H2H_Home_Win_Ratio', 'H2H_Avg_Goals', 'Home_Days_Since_Last_Match',
             'Away_Days_Since_Last_Match', 'Home_League_Pos', 'Away_League_Pos', 'League_Pos_Diff',
-            'Is_Weekend'
+            'Home_Form', 'Away_Form',
+            'Home_Team_Home_Performance', 'Away_Team_Away_Performance',
+            'Home_Streak', 'Away_Streak', 'Season_Progress', 'Is_Weekend'
         ]
         
+        features = pd.DataFrame([[
+            home_stats['last5_wins'],
+            away_stats['last5_wins'],
+            home_stats['h2h_win_ratio'],
+            home_stats['h2h_avg_goals'],
+            home_stats['days_since_last_match'],
+            away_stats['days_since_last_match'],
+            home_league_pos,
+            away_league_pos,
+            home_league_pos - away_league_pos,
+            home_stats['form'],
+            away_stats['form'],
+            home_stats['performance'],
+            away_stats['performance'],
+            home_stats['streak'],
+            away_stats['streak'],
+            season_progress,
+            1 if match_date.weekday() >= 5 else 0  # Is_Weekend
+        ]], columns=feature_names)
         
-        # Convert features to DataFrame with appropriate feature names
-        X = pd.DataFrame([features], columns=feature_names)
+        features_imputed = self.imputer.transform(features)
+        features_scaled = self.scaler.transform(features_imputed)
         
-        # Impute and scale the features
-        X_imputed = self.imputer.transform(X)
-        X_scaled = self.scaler.transform(X_imputed)
-
-        # Get probabilities instead of just the class
-        probabilities = self.model.predict_proba(X_scaled)[0]
+        predicted_result = self.le.inverse_transform(self.model.predict(features_scaled))[0]
         
-        # Use probabilities to make a weighted random choice
-        classes = self.le.classes_
-        predicted_result = self.random_state.choice(classes, p=probabilities)
-        
-        # Map the prediction to the actual team names or "DRAW"
         if predicted_result == 'HOME_TEAM':
             return home_team
         elif predicted_result == 'AWAY_TEAM':
