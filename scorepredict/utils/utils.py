@@ -537,15 +537,10 @@ def get_all_miners(self):
     """
     # Determine miner axons to query from metagraph
     vuids = get_all_validators(self)
-    return [uid for uid in self.metagraph.uids.tolist() if uid not in vuids]
+    return [uid for uid in self.metagraph.uids.tolist() 
+            if uid not in vuids and self.metagraph.axons[uid].ip != '0.0.0.0']
+            #Remove those that are not connected
 
-
-
-
-
-
-
-######
 
 
 def get_query_miners(self, k=20, exlucde=None):

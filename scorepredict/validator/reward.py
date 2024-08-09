@@ -77,7 +77,7 @@ def reward(prediction, match_data, prediction_time, c, miner_uid):
     else:
         actual_winner = "DRAW"
 
-    base_reward = 3.0 if prediction == actual_winner else 0.0
+    base_reward = 3.0 if prediction == actual_winner else 0.1
     
     match_time = datetime.fromisoformat(match_data['utcDate'].rstrip('Z'))
     
