@@ -213,7 +213,8 @@ class BaseValidatorNeuron(BaseNeuron):
                 if elapsed < self.config.neuron.timeout:
                     sleep_time = self.config.neuron.timeout - elapsed
                     bt.logging.info(f"Sleeping for {sleep_time} ...")
-                    time.sleep(sleep_time)
+                    #time.sleep(sleep_time) NOTE Turn this back on
+                    time.sleep(1)
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:

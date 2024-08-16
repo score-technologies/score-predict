@@ -21,6 +21,7 @@
 import time
 import os
 import wandb
+import torch
 # Bittensor
 import bittensor as bt
 
@@ -49,6 +50,7 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info("load_state()")
         self.load_state()
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
                 # Set up simulated time if enabled
         if self.config.simulate_time:

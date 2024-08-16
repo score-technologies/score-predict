@@ -33,6 +33,7 @@ from scorepredict.protocol import Prediction
 
 # import base miner class which takes care of most of the boilerplate
 from scorepredict.base.miner import BaseMinerNeuron
+from scorepredict.constants import MINUTES_BEFORE_KICKOFF
 from base_miner.predictor import FootballPredictor
 
 load_dotenv()
@@ -62,6 +63,7 @@ class Miner(BaseMinerNeuron):
             home_team = synapse.home_team
             away_team = synapse.away_team
             date_time_str = synapse.match_date
+
 
             # Parse the date_time_str to a datetime object and then convert to a date string (YYYY-MM-DD)
             date = parser.parse(date_time_str).date().isoformat()

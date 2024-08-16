@@ -162,11 +162,18 @@ class FootballPredictor:
         features_imputed = self.imputer.transform(features)
         features_scaled = self.scaler.transform(features_imputed)
         
-        predicted_result = self.le.inverse_transform(self.model.predict(features_scaled))[0]
+        # Get probabilities
+        probabilities = self.model.predict_proba(features_scaled)[0]
         
-        if predicted_result == 'HOME_TEAM':
+        # Define a threshold for "marginal" predictions
+        threshold = 0.05  # You can adjust this value
+        
+        # Randomly choose based on probabilities
+        result = np.random.choice(self.le.classes_, p=probabilities)
+        
+        if result == 'HOME_TEAM':
             return home_team
-        elif predicted_result == 'AWAY_TEAM':
+        elif result == 'AWAY_TEAM':
             return away_team
         else:
             return 'DRAW'

@@ -36,6 +36,8 @@ import pandas as pd
 
 from dotenv import load_dotenv
 
+from scorepredict.constants import MINUTES_BEFORE_KICKOFF, SCORE_PREDICT_API_URL, SCORE_MATCH_API
+
 load_dotenv()
 
 # Global variable to store the simulated current time
@@ -49,10 +51,10 @@ def send_predictions_to_website(self):
 
     bt.logging.debug(f"Netuid: {self.config.netuid}")
 
-        # Check if running on mainnet
-    if self.config.netuid != 44:
-        bt.logging.info("Not running on mainnet. Skipping sending predictions to website.")
-        return
+        # Check if running on mainnet NOTE TURN THIS BACK ON!
+    #if self.config.netuid != 44:
+    #    bt.logging.info("Not running on mainnet. Skipping sending predictions to website.")
+    #    return
 
 
     db_name = f'predictions-{self.uid}.db'
@@ -80,7 +82,8 @@ def send_predictions_to_website(self):
     ''')
     unsent_predictions = c.fetchall()
 
-    api_url = "https://app.scorepredict.io/api/predictions" 
+    api_url = f"{SCORE_PREDICT_API_URL}/api/predictions" 
+
 
     for miner_uid, match_id, prediction, timestamp, reward in unsent_predictions:
         payload = {
@@ -98,15 +101,19 @@ def send_predictions_to_website(self):
             print(f"Response status: {response.status_code}")
             print(f"Response content: {response.text}")  # Log the response content
 
-            if response.status_code == 201:
-                # Update the sentWebsite field
+            if response.status_code == 201 or response.status_code == 400:
+                # Update the sentWebsite field for both 201 (Created) and 400 (Bad Request) responses
                 c.execute('''
                     UPDATE predictions
                     SET sentWebsite = 1
                     WHERE miner_uid = ? AND match_id = ?
                 ''', (miner_uid, match_id))
                 conn.commit()
-                bt.logging.debug(f"Prediction for match {match_id} by miner {miner_uid} sent successfully.")
+                
+                if response.status_code == 201:
+                    bt.logging.debug(f"Prediction for match {match_id} by miner {miner_uid} sent successfully.")
+                else:  # 400 error
+                    bt.logging.warning(f"Received 400 error for match {match_id} by miner {miner_uid}. Marking as sent and moving on.")
             else:
                 bt.logging.error(f"Failed to send prediction. Status: {response.status_code}, Content: {response.text}")
         except requests.RequestException as e:
@@ -226,7 +233,6 @@ def get_available_uids(self, exclude: list = None):
     return avail_uids
 
 
-# TODO: update this to use the block hash seed paradigm so that we don't get uids that are unavailable
 def get_random_uids(
     self, k: int, exclude: List[int] = None, seed: int = None
 ) -> torch.LongTensor:
@@ -341,14 +347,16 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
     """
     API_KEY = os.getenv('FOOTBALL_API_KEY')
 
-    if self.config.score_api == True:
-        if self.config.simulate_time:
-            url = 'http://api.scorepredict.io/test'
-        else:
-            url = 'http://api.scorepredict.io/matches'
-        bt.logging.debug(f"Using score API: {url}")
-    else:
-        url = 'https://api.football-data.org/v4/matches'
+    # NOTE: add this bakc on this
+    # if self.config.score_api == True:
+    #     if self.config.simulate_time:
+    #         url = f"{SCORE_MATCH_API}/test"
+    #     else:
+    #         url = f"{SCORE_MATCH_API}/matches"
+    #     bt.logging.debug(f"Using score API: {url}")
+    # else:
+    #     url = 'https://api.football-data.org/v4/matches'
+    url = f"{SCORE_MATCH_API}/matches"
     headers = {'X-Auth-Token': API_KEY}
     
     params = {
@@ -540,6 +548,7 @@ def get_all_miners(self):
     return [uid for uid in self.metagraph.uids.tolist() 
             if uid not in vuids and self.metagraph.axons[uid].ip != '0.0.0.0']
             #Remove those that are not connected
+
 
 
 
