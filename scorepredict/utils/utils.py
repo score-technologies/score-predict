@@ -51,10 +51,10 @@ def send_predictions_to_website(self):
 
     bt.logging.debug(f"Netuid: {self.config.netuid}")
 
-        # Check if running on mainnet NOTE TURN THIS BACK ON!
-    #if self.config.netuid != 44:
-    #    bt.logging.info("Not running on mainnet. Skipping sending predictions to website.")
-    #    return
+        # Check if running on mainnet 
+    if self.config.netuid != 44:
+       bt.logging.info("Not running on mainnet. Skipping sending predictions to website.")
+       return
 
 
     db_name = f'predictions-{self.uid}.db'
@@ -347,16 +347,15 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
     """
     API_KEY = os.getenv('FOOTBALL_API_KEY')
 
-    # NOTE: add this bakc on this
-    # if self.config.score_api == True:
-    #     if self.config.simulate_time:
-    #         url = f"{SCORE_MATCH_API}/test"
-    #     else:
-    #         url = f"{SCORE_MATCH_API}/matches"
-    #     bt.logging.debug(f"Using score API: {url}")
-    # else:
-    #     url = 'https://api.football-data.org/v4/matches'
-    url = f"{SCORE_MATCH_API}/matches"
+    if self.config.score_api == True:
+        if self.config.simulate_time:
+            url = f"{SCORE_MATCH_API}/test"
+        else:
+            url = f"{SCORE_MATCH_API}/matches"
+        bt.logging.debug(f"Using score API: {url}")
+    else:
+        url = 'https://api.football-data.org/v4/matches'
+    
     headers = {'X-Auth-Token': API_KEY}
     
     params = {
