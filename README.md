@@ -223,8 +223,8 @@ The scoring system has been enhanced to include a streak multiplier, rewarding c
 
 1. Base Scoring:
 
-   - If a miner predicts the winner correctly, they score 3 points.
-   - If they don't predict correctly, they score 0 points.
+   - If a miner predicts the winner correctly, they score 1 points.
+   - If they don't predict correctly, they score 0.1 points.
 
 2. Streak Multiplier:
 
