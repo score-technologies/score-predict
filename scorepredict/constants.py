@@ -8,7 +8,7 @@ APP_SYNC_IN_BLOCKS = 5
 VALIDATOR_SET_WEIGHTS_IN_BLOCKS = 200
 
 # Number of minutes before kickoff to fetch upcoming matches
-MINUTES_BEFORE_KICKOFF = 300
+MINUTES_BEFORE_KICKOFF = 60
 
 # App Prediction API URL - where predictions are fetched and sent
 SCORE_PREDICT_API_URL = "https://app.scorepredict.io/"
