@@ -78,7 +78,7 @@ async def forward(self):
     """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS """
     if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0:
         bt.logging.debug(f"Keeping Validators Busy - Step: {self.step}")
-        #self.set_weights()
+        self.set_weights()
  
     """ FETCH UPCOMING MATCHES """
     matches = get_matches(self, date_str=current_time, minutes_before_kickoff=MINUTES_BEFORE_KICKOFF)
