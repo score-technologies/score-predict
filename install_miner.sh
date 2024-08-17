@@ -62,7 +62,7 @@ pip install -r requirements.txt
 # cd ..
 # git clone https://github.com/opentensor/bittensor.git
 # cd bittensor
-# git checkout release/7.3.1
+# git checkout release/7.1.1
 # pip install -e .
 # cd ../score-predict
 

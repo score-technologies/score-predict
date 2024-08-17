@@ -166,7 +166,7 @@ class FootballPredictor:
         probabilities = self.model.predict_proba(features_scaled)[0]
         
         # Define a threshold for "marginal" predictions
-        threshold = 0.05  # You can adjust this value
+        threshold = 0.07
         
         # Randomly choose based on probabilities
         result = np.random.choice(self.le.classes_, p=probabilities)
