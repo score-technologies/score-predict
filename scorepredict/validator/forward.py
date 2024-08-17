@@ -29,7 +29,7 @@ from scorepredict.utils.uids import get_random_uids
 from scorepredict.utils.utils import assign_challenges_to_validators, get_all_validators
 from scorepredict.utils.utils import get_current_time, advance_time, set_simulated_time
 from scorepredict.utils.utils import send_predictions_to_website
-from scorepredict.utils.utils import get_matches, get_all_miners
+from scorepredict.utils.utils import get_matches, get_all_miners, get_random_uids
 
 import sqlite3
 import collections
@@ -78,7 +78,7 @@ async def forward(self):
     """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS """
     if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0:
         bt.logging.debug(f"Keeping Validators Busy - Step: {self.step}")
-        self.set_weights()
+        #self.set_weights()
  
     """ FETCH UPCOMING MATCHES """
     matches = get_matches(self, date_str=current_time, minutes_before_kickoff=MINUTES_BEFORE_KICKOFF)
@@ -88,7 +88,8 @@ async def forward(self):
         return
 
     """ FETCH VALID MIDERS """
-    miner_uids = get_all_miners(self)
+    miner_uids = get_random_uids(self, k=20)
+    bt.logging.info(f"Random Miner UIDs: {miner_uids}")
     
     if not miner_uids:
         bt.logging.info("No miners available.")
