@@ -1,6 +1,7 @@
 # The MIT License (MIT)
-# Copyright © 2024 Yuma Rao
-# Copyright © 2024 Score Predict
+# Copyright © 2023 Yuma Rao
+# TODO(developer): Set your name
+# Copyright © 2023 <your name>
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated
 # documentation files (the “Software”), to deal in the Software without restriction, including without limitation
@@ -15,26 +16,19 @@
 # THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
-
 import os
 import time
 import typing
 import bittensor as bt
-import datetime
-from dateutil import parser
 
-import json
-import asyncio
-from dotenv import load_dotenv
-
-# Bittensor Miner Template:``
 import scorepredict
 from scorepredict.protocol import Prediction
 
 # import base miner class which takes care of most of the boilerplate
 from scorepredict.base.miner import BaseMinerNeuron
-from scorepredict.constants import MINUTES_BEFORE_KICKOFF
-from base_miner.predictor import FootballPredictor
+
+from dotenv import load_dotenv
+import aiohttp
 
 load_dotenv()
 
@@ -49,7 +43,8 @@ class Miner(BaseMinerNeuron):
 
     def __init__(self, config=None):
         super(Miner, self).__init__(config=config)
-        self.predictor = FootballPredictor()
+
+        # TODO(developer): Anything specific to your use case you can do here
 
     def save_state(self):
         """
@@ -60,33 +55,33 @@ class Miner(BaseMinerNeuron):
 
     async def forward(self, synapse: scorepredict.protocol.Prediction) -> scorepredict.protocol.Prediction:
         try:
-            home_team = synapse.home_team
-            away_team = synapse.away_team
-            match_id = int(synapse.match_id)
-            date_time_str = synapse.match_date
-            competition = synapse.competition
-            bt.logging.debug(f"Synapse: {synapse}")
-            bt.logging.debug(f"Match ID: {match_id}")
+            async with aiohttp.ClientSession() as session:
+                url = f"http://app.scorepredict.io/api/predictions/count/{synapse.match_id}"
+                async with session.get(url) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        bt.logging.debug(f"API response: {data}")
 
+                        # Determine the consensus
+                        max_votes = max(data.values())
+                        winners = [team for team, votes in data.items() if votes == max_votes]
 
-            # Parse the date_time_str to a datetime object and then convert to a date string (YYYY-MM-DD)
-            date = parser.parse(date_time_str).date().isoformat()
+                        if len(winners) == 1:
+                            synapse.predicted_winner = winners[0]
+                        else:
+                            synapse.predicted_winner = "DRAW"
 
-            # Let's use our base predictor to make the prediciton
-            result = self.predictor.predict_winner(home_team, away_team, date, competition)
-            
-            # Update the synapse with the predicted winner
-            synapse.predicted_winner = result
-            synapse.match_id = match_id
-            
-            bt.logging.debug(f"Prediction: {result}")
+                        bt.logging.debug(f"Prediction: {synapse.predicted_winner}")
+                    else:
+                        bt.logging.error(f"API request failed with status {response.status}")
+                        return synapse  # Return synapse as-is on API failure
+
             bt.logging.debug(f"Returned Synapse: {synapse}")
             return synapse
 
         except Exception as e:
             bt.logging.error(f"An error occurred: {e}")
-            synapse.predicted_winner = None
-            return synapse        
+            return synapse  # Return synapse as-is on any error
 
 
     async def blacklist(

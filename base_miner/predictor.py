@@ -98,7 +98,7 @@ class FootballPredictor:
             'performance': performance
         }
 
-    def predict_winner(self, home_team, away_team, match_date):
+    def predict_winner(self, home_team, away_team, match_date, competition):
         # Convert match_date to datetime if it's a string
         if isinstance(match_date, str):
             try:
@@ -112,8 +112,6 @@ class FootballPredictor:
         # Ensure match_date is timezone-aware
         if match_date.tzinfo is None:
             match_date = match_date.replace(tzinfo=pytz.UTC)
-
-        competition = self.get_competition(home_team, away_team, match_date)
         
         home_stats = self.get_team_stats(home_team, match_date, competition)
         away_stats = self.get_team_stats(away_team, match_date, competition)

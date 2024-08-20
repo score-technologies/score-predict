@@ -102,9 +102,20 @@ async def forward(self):
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
     
-    # Create table if not exists
+    # Check if the competition column exists
+    c.execute("PRAGMA table_info(predictions)")
+    columns = [column[1] for column in c.fetchall()]
+    
+    if 'competition' not in columns:
+        # Add the competition column if it doesn't exist
+        c.execute("ALTER TABLE predictions ADD COLUMN competition TEXT")
+        conn.commit()
+        bt.logging.info("Added 'competition' column to predictions table")
+
+    # Create table if not exists (this won't affect existing tables)
     c.execute('''CREATE TABLE IF NOT EXISTS predictions
-                 (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, reward REAL, sentWebsite INTEGER)''')
+                 (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, 
+                 reward REAL, sentWebsite INTEGER, competition TEXT)''')
 
     rewards = []
     rewarded_miner_uids = []
@@ -115,14 +126,16 @@ async def forward(self):
         away_team = match['awayTeam']['name']
         match_date = match['utcDate']
         deadline = match['utcDate']  
+        competition = match['competition']['name']
 
         # Create the Prediction synapse
         prediction = Prediction(
-            match_id=match_id,
+            match_id=int(match_id), 
             home_team=home_team,
             away_team=away_team,
             match_date=match_date,
-            deadline=deadline
+            deadline=deadline,
+            competition=competition
         )
 
         # Query all miners for this match
@@ -174,9 +187,8 @@ async def forward(self):
                 non_responsive_miner_uids.append(miner_uid)
                 continue
 
-            # Insert new prediction
-            c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?)",
-                      (miner_uid, match_id, predicted_winner, datetime.now(), None, sent_website))
+            c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      (miner_uid, match_id, predicted_winner, datetime.now(), None, sent_website, competition))
             
             active_miner_uids.append(miner_uid)
             

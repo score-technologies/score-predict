@@ -35,6 +35,8 @@ class Prediction(bt.Synapse, BaseModel):
     - predicted_winner: Predicted winning team (optional).
     - predicted_score_home: Predicted number of goals by the home team (optional).
     - predicted_score_away: Predicted number of goals by the away team (optional).
+    - competition: Name of the competition (e.g., "Premier League", "Champions League").
+
     """
 
     match_id: int = Field(..., title="Match ID", description="Unique identifier for the football match")
@@ -42,6 +44,7 @@ class Prediction(bt.Synapse, BaseModel):
     away_team: str = Field(..., title="Away Team", description="Name of the away team")
     match_date: str = Field(..., title="Match Date", description="Date and time of the match (ISO 8601 string format)")
     deadline: str = Field(..., title="Prediction Deadline", description="Deadline for submitting predictions (ISO 8601 string format)")
+    competition: str = Field(..., title="Competition", description="Name of the competition (e.g., 'Premier League', 'Champions League')")
     predicted_winner: Optional[str] = Field(None, title="Predicted Winner", description="Predicted winning team")
     
 
@@ -60,4 +63,5 @@ class Prediction(bt.Synapse, BaseModel):
             'match_date': self.match_date,
             'deadline': self.deadline,
             'predicted_winner': self.predicted_winner,
+            'competition': self.competition
         }
