@@ -64,10 +64,12 @@ class Miner(BaseMinerNeuron):
             away_team = synapse.away_team
             match_id = int(synapse.match_id)
             date_time_str = synapse.match_date
-            competition = synapse.competition
+            
             bt.logging.debug(f"Synapse: {synapse}")
             bt.logging.debug(f"Match ID: {match_id}")
 
+            # Check if competition exists in synapse and is not None
+            competition = getattr(synapse, 'competition', None)
 
             # Parse the date_time_str to a datetime object and then convert to a date string (YYYY-MM-DD)
             date = parser.parse(date_time_str).date().isoformat()

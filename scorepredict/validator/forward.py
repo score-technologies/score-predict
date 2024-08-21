@@ -54,7 +54,7 @@ async def forward(self):
 
     if self.config.simulate_time:
         # Advance simulated time by x minutes each iteration
-        advance_time(self, 10)
+        advance_time(self, 20)
         current_time = get_current_time(self)
         bt.logging.debug(f"Current simulated time: {current_time}")
 
@@ -77,7 +77,7 @@ async def forward(self):
 
     """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS """
     if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0:
-        bt.logging.debug(f"Keeping Validators Busy - Step: {self.step}")
+        bt.logging.debug(f"Set Weights - Step: {self.step}")
         self.set_weights()
  
     """ FETCH UPCOMING MATCHES """
@@ -101,21 +101,22 @@ async def forward(self):
     db_name = f'predictions-{self.uid}.db'
     conn = sqlite3.connect(db_name)
     c = conn.cursor()
-    
+
+    # Create table if not exists
+    c.execute('''CREATE TABLE IF NOT EXISTS predictions
+                (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, 
+                reward REAL, sentWebsite INTEGER, competition TEXT)''')
+    conn.commit()
+
     # Check if the competition column exists
     c.execute("PRAGMA table_info(predictions)")
     columns = [column[1] for column in c.fetchall()]
-    
+
     if 'competition' not in columns:
         # Add the competition column if it doesn't exist
         c.execute("ALTER TABLE predictions ADD COLUMN competition TEXT")
         conn.commit()
         bt.logging.info("Added 'competition' column to predictions table")
-
-    # Create table if not exists (this won't affect existing tables)
-    c.execute('''CREATE TABLE IF NOT EXISTS predictions
-                 (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, 
-                 reward REAL, sentWebsite INTEGER, competition TEXT)''')
 
     rewards = []
     rewarded_miner_uids = []
@@ -193,13 +194,6 @@ async def forward(self):
             active_miner_uids.append(miner_uid)
             
         conn.commit()
-
-        # Reward active miners
-        rewards = [REWARD_FOR_RESPONSE for _ in active_miner_uids]
-        if active_miner_uids:
-            bt.logging.info(f"Rewarding miners {active_miner_uids} that returned a prediction.")
-            self.update_scores(torch.FloatTensor(rewards).to(self.device), active_miner_uids)
-
         # Penalize only non-responsive miners
         no_rewards = [0.0 for _ in non_responsive_miner_uids]
         if non_responsive_miner_uids:
@@ -208,12 +202,12 @@ async def forward(self):
 
     conn.close()
 
-    
     additional_rewards_array, additional_rewarded_miner_uids = get_rewards(self)
     
     if len(additional_rewards_array) > 0:
         bt.logging.debug(f"Additional scored responses array returned: {additional_rewards_array}")
         bt.logging.debug(f"Additional rewarded miner ids array returned: {additional_rewarded_miner_uids}")
         self.update_scores(additional_rewards_array.tolist(), additional_rewarded_miner_uids)
+        self.set_weights()
     else:
         bt.logging.debug(f"No additional rewards to process.")

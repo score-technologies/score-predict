@@ -1,4 +1,4 @@
-bittensor==7.1.1
+git+https://github.com/opentensor/bittensor.git@release/7.1.2#egg=bittensor
 openai
 openapi-schema-pydantic
 torch==2.2.0

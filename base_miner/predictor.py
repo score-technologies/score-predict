@@ -112,6 +112,10 @@ class FootballPredictor:
         # Ensure match_date is timezone-aware
         if match_date.tzinfo is None:
             match_date = match_date.replace(tzinfo=pytz.UTC)
+
+        # If competition is None, use the get_competition function
+        if competition is None:
+            competition = self.get_competition(home_team, away_team, match_date)
         
         home_stats = self.get_team_stats(home_team, match_date, competition)
         away_stats = self.get_team_stats(away_team, match_date, competition)

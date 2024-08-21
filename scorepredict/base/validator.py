@@ -213,8 +213,8 @@ class BaseValidatorNeuron(BaseNeuron):
                 if elapsed < self.config.neuron.timeout:
                     sleep_time = self.config.neuron.timeout - elapsed
                     bt.logging.info(f"Sleeping for {sleep_time} ...")
-                    #time.sleep(sleep_time)
-                    time.sleep(1)
+                    time.sleep(sleep_time)
+                    #time.sleep(0.5)
 
         # If someone intentionally stops the validator, it'll safely terminate operations.
         except KeyboardInterrupt:
@@ -388,11 +388,11 @@ class BaseValidatorNeuron(BaseNeuron):
         if np.isnan(rewards).any():
             bt.logging.warning(f"NaN values detected in rewards: {rewards}")
             rewards = np.nan_to_num(rewards, nan=0)
-
         # Create a dictionary to store the sum of rewards for each unique UID
         uid_rewards = {}
         for uid, reward in zip(uids, rewards):
             uid_rewards[uid] = uid_rewards.get(uid, 0) + reward
+            bt.logging.debug(f"uid: {uid}, reward: {reward}")
 
         bt.logging.debug(f"uid_rewards: {uid_rewards}")
         # Update scores only for the UIDs that were part of this validation round
