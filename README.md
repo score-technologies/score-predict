@@ -62,11 +62,10 @@ For more details and to view the leaderboard, visit [app.scorepredict.io/leaderb
 ## Key Points:
 
 1. The validators fetch games kicking off in the next 60 minutes
-2. They use a hash of the epoch and miner_uids to allocate challenges based on the validators stake
-3. Challenges are served to miners
-4. Miners have 12 seconds to respond
-5. Finished matches from the previous day are fetched from an API, and checked against store submissions
-6. When there is a match, scoring is done, weights are set and submission is removed
+2. Challenges are served to random groups of miners
+3. Miners have 12 seconds to respond
+4. Finished matches from the previous day are fetched from an API, and checked against store submissions
+5. When there is a match, scoring is done, weights are set and submission is removed
 
 ## Quickstart
 
@@ -169,7 +168,7 @@ pm2 start python --name miner -- neurons/miner.py --netuid 44 --wallet.name YOUR
 
 #### Miner Code Overview
 
-- **`neurons/miner.py`**: Defines the `Miner` class, which inherits from `BaseMinerNeuron`. The `forward` method generates predictions using the OpenAI GPT model.
+- **`neurons/miner.py`**: Defines the `Miner` class, which inherits from `BaseMinerNeuron`. The `forward` method generates predictions using the an included base model.
 
 #### Current Base Model
 
@@ -219,11 +218,11 @@ Note – on Testnet we are using a very low vpermit_tao_limit of 1 for testing v
 
 ## Scoring
 
-The scoring system has been enhanced to include a streak multiplier, rewarding consistent performance:
+The scoring system has been enhanced to include multiple factors for a more comprehensive evaluation:
 
 1. Base Scoring:
 
-   - If a miner predicts the winner correctly, they score 1 points.
+   - If a miner predicts the winner correctly, they score 1 point.
    - If they don't predict correctly, they score 0.1 points.
 
 2. Streak Multiplier:
@@ -231,14 +230,33 @@ The scoring system has been enhanced to include a streak multiplier, rewarding c
    - The system tracks each miner's streak of correct predictions.
    - Multipliers are applied based on the length of the streak:
      - 2-4 correct predictions: 1.1x multiplier
-     - 5-9 correct predictions: 1.4x multiplier
-     - 10-19 correct predictions: 1.8x multiplier
-     - 20+ correct predictions: 2.0x multiplier
+     - 5-9 correct predictions: 1.3x multiplier
+     - 10-19 correct predictions: 1.5x multiplier
+     - 20+ correct predictions: 1.8x multiplier
 
-3. Final Score Calculation:
-   - Final Score = Base Score \* Streak Multiplier
+3. Time-based Multiplier:
 
-This scoring logic encourages consistent accuracy and will become more complex as additional in-game predictions are introduced.
+   - Predictions made earlier receive a higher multiplier.
+   - The multiplier decays linearly from 1.3 to 1.0 as the prediction time approaches kickoff.
+
+4. Participation Factor:
+
+   - Miners are rewarded for consistent participation.
+   - The factor is calculated based on the miner's prediction count relative to the average.
+
+5. Win Rate Multiplier:
+
+   - Miners with higher win rates over the past 7 days receive additional bonuses:
+     - 70%+ win rate: 1.3x multiplier
+     - 60-69% win rate: 1.2x multiplier
+     - 50-59% win rate: 1.1x multiplier
+     - 40-49% win rate: 1.0x multiplier (no change)
+     - Below 40% win rate: 0.9x multiplier (slight penalty)
+
+6. Final Score Calculation:
+   - Final Score = Base Score _ Streak Multiplier _ Time Multiplier _ Participation Factor _ Win Rate Multiplier
+
+This scoring logic encourages consistent accuracy, timely predictions, regular participation, and overall performance. The system aims to reward miners who provide valuable and reliable predictions over time.
 
 ### Centralised API
 
