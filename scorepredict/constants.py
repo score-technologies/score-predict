@@ -18,6 +18,5 @@ SCORE_PREDICT_API_URL = "https://app.scorepredict.io/"
 REWARD_FOR_RESPONSE = 0.1
 
 # Score Match API URL - where games are fetched from
-#SCORE_MATCH_API = "http://api.scorepredict.io"
-
-SCORE_MATCH_API = "http://localhost:5001"
+SCORE_MATCH_API = "http://api.scorepredict.io"
+#SCORE_MATCH_API = "http://localhost:5001"
