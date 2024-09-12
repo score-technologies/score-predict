@@ -8,5 +8,6 @@ pydantic
 wandb
 python-dotenv
 joblib==1.2.0
-scikit-learn==1.5.1
+scikit-learn==1.5.0
 pytz
+huggingface_hub

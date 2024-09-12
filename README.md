@@ -46,6 +46,9 @@ Currently, the validator will serve challenges with all competitive games from t
 - Primera Division
 - Campeonato Brasileiro Série A
 - Eredivisie
+- UEFA Nations League (NEW)
+- MLS (NEW)
+- Jupiler Pro League (NEW)
 
 ### Score Predict App
 
@@ -61,7 +64,7 @@ For more details and to view the leaderboard, visit [app.scorepredict.io/leaderb
 
 ## Key Points:
 
-1. The validators fetch games kicking off in the next 60 minutes
+1. The validators fetch games kicking off in the next 180 minutes
 2. Challenges are served to random groups of miners
 3. Miners have 12 seconds to respond
 4. Finished matches from the previous day are fetched from an API, and checked against store submissions

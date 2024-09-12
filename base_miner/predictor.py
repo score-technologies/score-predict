@@ -4,22 +4,31 @@ import numpy as np
 from joblib import load
 from datetime import datetime
 import pytz
+from huggingface_hub import hf_hub_download
 
 class FootballPredictor:
     def __init__(self):
         base_dir = os.path.dirname(os.path.abspath(__file__))
         
-        # Load the saved models and transformers
-        self.model = load(os.path.join(base_dir, 'model/random_forest_model.joblib'))
-        self.imputer = load(os.path.join(base_dir, 'model/imputer.joblib'))
-        self.scaler = load(os.path.join(base_dir, 'model/feature_scaler.joblib'))
-        self.le = load(os.path.join(base_dir, 'model/label_encoder.joblib'))
-
-        # Load the dataset
-        self.df = pd.read_csv(os.path.join(base_dir, 'model/football-features.csv'))
+        # Load the saved models and transformers from Hugging Face
+        self.model_winner = self.load_model("random_forest_model_winner.joblib")
+        self.model_home_score = self.load_model("random_forest_model_home_score.joblib")
+        self.model_away_score = self.load_model("random_forest_model_away_score.joblib")
+        self.imputer = self.load_model("imputer.joblib")
+        self.scaler = self.load_model("feature_scaler.joblib")
+        self.le = self.load_model("label_encoder.joblib")
+        
+        # Load the dataset from Hugging Face
+        csv_path = hf_hub_download(repo_id="tmoklc/base_score_miner", filename="football-features.csv")
+        self.df = pd.read_csv(csv_path)
         self.df['Date'] = pd.to_datetime(self.df['Date'], utc=True)
         self.df['Season Start'] = pd.to_datetime(self.df['Season Start'], utc=True)
-        self.df['Season End'] = pd.to_datetime(self.df['Season End'], utc=True)
+        self.df['Season End'] = pd.to_datetime(self.df['Season End'], utc=True)       
+
+    def load_model(self, filename):
+        repo_id = "tmoklc/base_score_miner"
+        model_path = hf_hub_download(repo_id=repo_id, filename=filename)
+        return load(model_path)
 
     def get_competition(self, home_team, away_team, match_date):
         recent_match = self.df[((self.df['Home Team'] == home_team) | (self.df['Away Team'] == home_team) |
@@ -165,13 +174,17 @@ class FootballPredictor:
         features_scaled = self.scaler.transform(features_imputed)
         
         # Get probabilities
-        probabilities = self.model.predict_proba(features_scaled)[0]
+        probabilities = self.model_winner.predict_proba(features_scaled)[0]
         
         # Define a threshold for "marginal" predictions
         threshold = 0.07
         
         # Randomly choose based on probabilities
         result = np.random.choice(self.le.classes_, p=probabilities)
+        
+        # Predict scores (but don't return them yet)
+        home_score = round(self.model_home_score.predict(features_scaled)[0])
+        away_score = round(self.model_away_score.predict(features_scaled)[0])
         
         if result == 'HOME_TEAM':
             return home_team

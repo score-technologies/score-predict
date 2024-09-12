@@ -88,7 +88,7 @@ async def forward(self):
         return
 
     """ FETCH VALID MIDERS """
-    miner_uids = get_random_uids(self, k=20)
+    miner_uids = get_random_uids(self, k=30)
     bt.logging.info(f"Random Miner UIDs: {miner_uids}")
     
     if not miner_uids:
@@ -195,10 +195,10 @@ async def forward(self):
             
         conn.commit()
         # Penalize only non-responsive miners
-        no_rewards = [0.0 for _ in non_responsive_miner_uids]
-        if non_responsive_miner_uids:
-            bt.logging.info(f"Penalizing miners {non_responsive_miner_uids} that did not respond or returned NULL.")
-            self.update_scores(torch.FloatTensor(no_rewards).to(self.device), non_responsive_miner_uids)
+        # no_rewards = [0.0 for _ in non_responsive_miner_uids]
+        # if non_responsive_miner_uids:
+        #     bt.logging.info(f"Penalizing miners {non_responsive_miner_uids} that did not respond or returned NULL.")
+        #     self.update_scores(torch.FloatTensor(no_rewards).to(self.device), non_responsive_miner_uids)
 
     conn.close()
 
