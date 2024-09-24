@@ -203,7 +203,7 @@ async def forward(self):
     conn.close()
 
     additional_rewards_array, additional_rewarded_miner_uids = get_rewards(self)
-    
+
     if len(additional_rewards_array) > 0:
         bt.logging.debug(f"Additional scored responses array returned: {additional_rewards_array}")
         bt.logging.debug(f"Additional rewarded miner ids array returned: {additional_rewarded_miner_uids}")

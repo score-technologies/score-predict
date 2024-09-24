@@ -124,123 +124,116 @@ def get_win_rate_multiplier(win_rate):
 def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
     bt.logging.debug("Entering get_rewards function")
     
-    if self.config.simulate_time:
-        target_date = get_current_time(self) - timedelta(hours=24)
-    else:
-        target_date = get_current_time(self)
+    target_date = get_current_time(self) - timedelta(hours=24) if self.config.simulate_time else get_current_time(self)
 
     finished_matches = get_matches(self, date_str=target_date, status='FINISHED')
 
-    bt.logging.debug(f"Finished matches: {finished_matches}")
-
-    if finished_matches is None:
+    if not finished_matches:
         bt.logging.info("No finished matches found. Returning empty reward tensor and miner UIDs.")
         return torch.FloatTensor([]), []
 
     db_name = f'predictions-{self.uid}.db'
-    conn = sqlite3.connect(db_name)
-    c = conn.cursor()
+    
+    try:
+        with sqlite3.connect(db_name) as conn:
+            c = conn.cursor()
 
-    # Get the total number of predictions in the last 7 days
-    seven_days_ago = target_date - timedelta(days=7)
-    c.execute("SELECT miner_uid, COUNT(*) FROM predictions WHERE timestamp > ? GROUP BY miner_uid", (seven_days_ago,))
-    prediction_counts = dict(c.fetchall())
+            seven_days_ago = target_date - timedelta(days=7)
+            
+            # Get prediction counts and win rates in a single query
+            c.execute("""
+                SELECT miner_uid, 
+                       COUNT(*) as total_predictions,
+                       SUM(CASE WHEN reward > 0.5 THEN 1 ELSE 0 END) as wins
+                FROM predictions 
+                WHERE timestamp > ?
+                GROUP BY miner_uid
+            """, (seven_days_ago,))
+            
+            miner_stats = {row[0]: {'predictions': row[1], 'wins': row[2]} for row in c.fetchall()}
+            
+            if not miner_stats:
+                bt.logging.info("No predictions found in the last 7 days. Returning empty reward tensor and miner UIDs.")
+                return torch.FloatTensor([]), []
 
-    bt.logging.debug(f"Prediction counts: {prediction_counts}")
+            total_predictions = sum(stats['predictions'] for stats in miner_stats.values())
+            avg_predictions = total_predictions / len(miner_stats) if len(miner_stats) > 0 else 0
 
-    total_predictions = sum(prediction_counts.values())
-    if prediction_counts:
-        avg_predictions = total_predictions / len(prediction_counts)
-    else:
-        avg_predictions = 0
+            # Calculate win rates
+            win_rates = {uid: stats['wins'] / stats['predictions'] if stats['predictions'] > 0 else 0 
+                         for uid, stats in miner_stats.items()}
 
-    bt.logging.debug(f"Total predictions: {total_predictions}, Average predictions: {avg_predictions}")
+            # Process rewards
+            miner_rewards = defaultdict(float)
+            rewarded_miner_uids = []
 
-    if not prediction_counts:
-        bt.logging.info("No predictions found in the last 7 days. Returning empty reward tensor and miner UIDs.")
-        return torch.FloatTensor([]), []
+            for match_id, match in finished_matches.items():
+                c.execute("SELECT miner_uid, prediction, timestamp, reward FROM predictions WHERE match_id=? ORDER BY timestamp", (match_id,))
+                predictions = c.fetchall()
+                
+                for miner_uid, prediction, timestamp, reward_value_from_db in predictions:
+                    if reward_value_from_db is not None:
+                        bt.logging.debug(f"Reward already processed for miner {miner_uid} for match {match_id}. Skipping.")
+                        continue
 
-    # Calculate win rates for each miner
-    win_rates = {}
-    for miner_uid in prediction_counts.keys():
-        c.execute("""
-            SELECT COUNT(*) as total, SUM(CASE WHEN reward > 0.5 THEN 1 ELSE 0 END) as wins
-            FROM predictions
-            WHERE miner_uid = ? AND timestamp > ? AND reward IS NOT NULL
-        """, (miner_uid, seven_days_ago))
-        total, wins = c.fetchone()
-        bt.logging.debug(f"Miner {miner_uid} has {total} predictions and {wins} wins in the last 7 days.")
-        if total > 0:
-            win_rates[miner_uid] = wins / total
-            bt.logging.debug(f"Win rate for miner {miner_uid}: {win_rates[miner_uid]:.2f}")
+                    prediction_time = datetime.fromisoformat(timestamp)
+                    
+                    # Calculate base reward
+                    base_reward = reward(prediction, match, prediction_time, c, miner_uid)
+                    
+                    # Accumulate base reward for each miner
+                    miner_rewards[miner_uid] += base_reward
+                    
+                    if miner_uid not in rewarded_miner_uids:
+                        rewarded_miner_uids.append(miner_uid)
+
+                    # Update the reward in the database
+                    c.execute("UPDATE predictions SET reward=? WHERE match_id=? AND miner_uid=?", (base_reward, match_id, miner_uid))
+
+            # Apply participation factor and win rate multiplier to accumulated rewards
+            final_rewards = []
+            for miner_uid in rewarded_miner_uids:
+                base_reward = miner_rewards[miner_uid]
+                
+                # Apply participation factor
+                miner_prediction_count = miner_stats.get(miner_uid, {'predictions': 0})['predictions']
+                avg_predictions_for_participation = max(avg_predictions * 0.5, 1.0)
+                participation_factor = min(1.0, miner_prediction_count / avg_predictions_for_participation)
+
+                # Apply win rate multiplier
+                win_rate = win_rates.get(miner_uid, 0)
+                win_rate_multiplier = get_win_rate_multiplier(win_rate)
+
+                total_reward = base_reward * participation_factor * win_rate_multiplier
+                final_rewards.append(total_reward)
+
+                # Log the results for each miner
+                bt.logging.info(f"Miner {miner_uid}:")
+                bt.logging.info(f"  Total Base Reward: {base_reward:.4f}")
+                bt.logging.info(f"  Total Final Reward: {total_reward:.4f}")
+                bt.logging.info(f"  Participation Factor: {participation_factor:.4f}")
+                bt.logging.info(f"  Win Rate Multiplier: {win_rate_multiplier:.4f}")
+
+            conn.commit()
+
+        # Normalize rewards
+        total_rewards = sum(final_rewards)
+
+        bt.logging.debug(f"Total rewards: {total_rewards}, Rewarded miner UIDs: {rewarded_miner_uids}")
+
+        if total_rewards > 0:
+            normalized_rewards = [reward / total_rewards for reward in final_rewards]
+            rewards_tensor = torch.FloatTensor(normalized_rewards).to(self.device)
+            bt.logging.debug(f"Rewards tensor: {rewards_tensor}")
+            bt.logging.info(f"Processed additional rewards for {len(rewarded_miner_uids)} miners.")
+            return rewards_tensor, rewarded_miner_uids
         else:
-            win_rates[miner_uid] = 0
+            bt.logging.info("No additional rewards to process or all rewards are zero.")
+            return torch.FloatTensor([]), []
 
-    aggregated_rewards = defaultdict(float)
-    rewarded_miner_uids = set()
-    miner_scores = defaultdict(lambda: {'total_base': 0, 'total_reward': 0, 'participation_factor': 0, 'win_rate_multiplier': 0})
-
-    for match_id, match in finished_matches.items():
-        bt.logging.debug(f"Processing match {match_id}")
-        c.execute("SELECT miner_uid, prediction, timestamp, reward FROM predictions WHERE match_id=?", (match_id,))
-        predictions = c.fetchall()
-        
-        for miner_uid, prediction, timestamp, reward_value_from_db in predictions:
-            if reward_value_from_db is not None:
-                bt.logging.debug(f"Reward already processed for miner {miner_uid} for match {match_id}. Skipping.")
-                continue
-
-            prediction_time = datetime.fromisoformat(timestamp)
-            
-            # Use the reward calculation
-            base_reward = reward(prediction, match, prediction_time, c, miner_uid)
-            
-            # Apply participation factor
-            miner_prediction_count = prediction_counts.get(miner_uid, 0)
-            participation_factor = min(1.0, miner_prediction_count / (avg_predictions * 0.5))
-
-            # Apply win rate multiplier
-            win_rate = win_rates.get(miner_uid, 0)
-            win_rate_multiplier = get_win_rate_multiplier(win_rate)
-
-            total_reward = base_reward * participation_factor * win_rate_multiplier
-            
-            aggregated_rewards[miner_uid] += total_reward
-            rewarded_miner_uids.add(miner_uid)
-
-            # Update miner_scores
-            miner_scores[miner_uid]['total_base'] += base_reward
-            miner_scores[miner_uid]['total_reward'] += total_reward
-            miner_scores[miner_uid]['participation_factor'] = participation_factor
-            miner_scores[miner_uid]['win_rate_multiplier'] = win_rate_multiplier
-
-            # Update the reward in the database
-            c.execute("UPDATE predictions SET reward=? WHERE match_id=? AND miner_uid=?", (total_reward, match_id, miner_uid))
-
-    # Log the results for each miner
-    bt.logging.info("Miner Scoring Results:")
-    for miner_uid, scores in miner_scores.items():
-        bt.logging.info(f"Miner {miner_uid}:")
-        bt.logging.info(f"  Total Base Reward: {scores['total_base']:.4f}")
-        bt.logging.info(f"  Total Final Reward: {scores['total_reward']:.4f}")
-        bt.logging.info(f"  Participation Factor: {scores['participation_factor']:.4f}")
-        bt.logging.info(f"  Win Rate Multiplier: {scores['win_rate_multiplier']:.4f}")
-
-    conn.commit()
-    conn.close()
-
-    # Normalize rewards
-    total_rewards = sum(aggregated_rewards.values())
-    rewarded_miner_uids = list(rewarded_miner_uids)
-
-    bt.logging.debug(f"Total rewards: {total_rewards}, Rewarded miner UIDs: {rewarded_miner_uids}")
-
-    if total_rewards > 0:
-        normalized_rewards = [reward / total_rewards for reward in aggregated_rewards.values()]
-        rewards_tensor = torch.FloatTensor(normalized_rewards).to(self.device)
-        bt.logging.debug(f"Rewards tensor: {rewards_tensor}")
-        bt.logging.info(f"Processed additional rewards for {len(rewarded_miner_uids)} miners.")
-        return rewards_tensor, rewarded_miner_uids
-    else:
-        bt.logging.info("No additional rewards to process or all rewards are zero.")
+    except sqlite3.Error as e:
+        bt.logging.error(f"Database error: {e}")
+        return torch.FloatTensor([]), []
+    except Exception as e:
+        bt.logging.error(f"Unexpected error in get_rewards: {e}")
         return torch.FloatTensor([]), []
