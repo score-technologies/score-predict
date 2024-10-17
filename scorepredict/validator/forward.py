@@ -22,6 +22,8 @@ import pandas as pd
 import bittensor as bt
 import wandb
 import torch
+from typing import Optional
+import json
 
 from scorepredict.protocol import Prediction
 from scorepredict.validator.reward import get_rewards
@@ -42,6 +44,9 @@ from scorepredict.constants import (
     SCORE_PREDICT_API_URL,
     REWARD_FOR_RESPONSE
 )
+
+self.pending_weight_update = False
+self.cached_rewards: Optional[tuple] = None
 
 async def forward(self):
     """
@@ -76,12 +81,21 @@ async def forward(self):
         send_predictions_to_website(self)
 
     """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS """
-    if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0:
+    if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0 or self.pending_weight_update:
         bt.logging.debug(f"Set Weights - Step: {self.step}")
-        self.set_weights()
- 
+        try:
+            if self.cached_rewards:
+                rewards, rewarded_miner_uids = self.cached_rewards
+                self.update_scores(rewards, rewarded_miner_uids)
+                self.cached_rewards = None
+            self.set_weights()
+            self.pending_weight_update = False
+        except Exception as e:
+            bt.logging.error(f"Failed to set weights: {e}")
+            self.pending_weight_update = True
+
     """ PERIODICALLY CHECK FOR FINISHED MATCHES AND SCORE """
-    if self.step % 2 == 0:  # Adjust this value to change how often you check for finished matches
+    if self.step % 100 == 0:  # Adjust this value to change how often you check for finished matches
         bt.logging.debug(f"Checking for finished matches - Step: {self.step}")
         rewards, rewarded_miner_uids = get_rewards(self)
         if len(rewards) > 0:
@@ -211,12 +225,20 @@ async def forward(self):
 
     conn.close()
 
-    additional_rewards_array, additional_rewarded_miner_uids = get_rewards(self)
+    if not self.pending_weight_update:
+        additional_rewards_array, additional_rewarded_miner_uids = get_rewards(self)
 
-    if len(additional_rewards_array) > 0:
-        bt.logging.debug(f"Additional scored responses array returned: {additional_rewards_array}")
-        bt.logging.debug(f"Additional rewarded miner ids array returned: {additional_rewarded_miner_uids}")
-        self.update_scores(additional_rewards_array.tolist(), additional_rewarded_miner_uids)
-        self.set_weights()
+        if len(additional_rewards_array) > 0:
+            bt.logging.debug(f"Additional scored responses array returned: {additional_rewards_array}")
+            bt.logging.debug(f"Additional rewarded miner ids array returned: {additional_rewarded_miner_uids}")
+            try:
+                self.update_scores(additional_rewards_array.tolist(), additional_rewarded_miner_uids)
+                self.set_weights()
+            except Exception as e:
+                bt.logging.error(f"Failed to update scores or set weights: {e}")
+                self.pending_weight_update = True
+                self.cached_rewards = (additional_rewards_array.tolist(), additional_rewarded_miner_uids)
+        else:
+            bt.logging.debug(f"No additional rewards to process.")
     else:
-        bt.logging.debug(f"No additional rewards to process.")
+        bt.logging.info("Skipping get_rewards() due to pending weight update.")
