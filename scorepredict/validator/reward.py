@@ -124,12 +124,19 @@ def get_win_rate_multiplier(win_rate):
 def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
     bt.logging.debug("Entering get_rewards function")
     
-    target_date = get_current_time(self) - timedelta(hours=24) if self.config.simulate_time else get_current_time(self)
+    current_date = get_current_time(self)
+    yesterday = current_date - timedelta(days=1)
 
-    finished_matches = get_matches(self, date_str=target_date, status='FINISHED')
+    finished_matches = get_matches(self, date_str=current_date, status='FINISHED')
+    finished_matches_yesterday = get_matches(self, date_str=yesterday, status='FINISHED')
+
+    if finished_matches:
+        finished_matches.update(finished_matches_yesterday)
+    else:
+        finished_matches = finished_matches_yesterday
 
     if not finished_matches:
-        bt.logging.info("No finished matches found. Returning empty reward tensor and miner UIDs.")
+        bt.logging.info("No finished matches found for today or yesterday. Returning empty reward tensor and miner UIDs.")
         return torch.FloatTensor([]), []
 
     db_name = f'predictions-{self.uid}.db'
@@ -138,7 +145,13 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
         with sqlite3.connect(db_name) as conn:
             c = conn.cursor()
 
-            seven_days_ago = target_date - timedelta(days=7)
+            # Create table if not exists
+            c.execute('''CREATE TABLE IF NOT EXISTS predictions
+                        (miner_uid INTEGER, match_id INTEGER, prediction TEXT, timestamp DATETIME, 
+                        reward REAL, sentWebsite INTEGER, competition TEXT)''')
+            conn.commit()
+
+            seven_days_ago = current_date - timedelta(days=7)
             
             # Get prediction counts and win rates in a single query
             c.execute("""

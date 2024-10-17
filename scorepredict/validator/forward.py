@@ -80,6 +80,15 @@ async def forward(self):
         bt.logging.debug(f"Set Weights - Step: {self.step}")
         self.set_weights()
  
+    """ PERIODICALLY CHECK FOR FINISHED MATCHES AND SCORE """
+    if self.step % 2 == 0:  # Adjust this value to change how often you check for finished matches
+        bt.logging.debug(f"Checking for finished matches - Step: {self.step}")
+        rewards, rewarded_miner_uids = get_rewards(self)
+        if len(rewards) > 0:
+            bt.logging.info(f"Processed rewards for {len(rewarded_miner_uids)} miners.")
+            self.update_scores(rewards, rewarded_miner_uids)
+            self.set_weights()
+
     """ FETCH UPCOMING MATCHES """
     matches = get_matches(self, date_str=current_time, minutes_before_kickoff=MINUTES_BEFORE_KICKOFF)
     

@@ -336,7 +336,7 @@ def get_validators_and_shares(self, vpermit_tao_limit: int, vtrust_threshold: fl
 
 def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int = 60):
     """
-    Fetches upcoming matches from a football data API and returns them as a dictionary.
+    Fetches matches from a football data API and returns them as a dictionary.
     Each match is keyed by its match ID, making it easy to reference specific matches.
 
     Returns:
@@ -358,9 +358,15 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
     
     headers = {'X-Auth-Token': API_KEY}
     
+    # Convert date_str to datetime object if it's not already
+    if isinstance(date_str, str):
+        date = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+    else:
+        date = date_str
+
     params = {
-        'dateFrom': date_str.strftime('%Y-%m-%d'),
-        'dateTo': date_str.strftime('%Y-%m-%d'),
+        'dateFrom': date.strftime('%Y-%m-%d'),
+        'dateTo': date.strftime('%Y-%m-%d'),
         'status': status
     }
 
@@ -389,15 +395,11 @@ def get_matches(self, date_str, status: str = None, minutes_before_kickoff: int 
     
     # Filter matches to be between 0 and specified minutes before their kickoff time
     upcoming_matches = {}
+    current_time = get_current_time(self)
     for match in matches:
-        match_time = datetime.datetime.fromisoformat(match['utcDate'].rstrip('Z'))
+        # Use strptime instead of fromisoformat
+        match_time = datetime.datetime.strptime(match['utcDate'].rstrip('Z'), "%Y-%m-%dT%H:%M:%S")
         
-        # Convert date_str to datetime object if it's not already
-        if isinstance(date_str, str):
-            current_time = datetime.datetime.fromisoformat(date_str)
-        else:
-            current_time = date_str
-
         # Calculate time difference in minutes
         time_difference = (match_time - current_time).total_seconds() / 60
 
