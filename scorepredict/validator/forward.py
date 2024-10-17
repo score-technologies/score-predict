@@ -81,31 +81,33 @@ async def forward(self):
         bt.logging.debug(f"Send Predictions To App - Step: {self.step}")
         send_predictions_to_website(self)
 
-    """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS """
+    """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS AND PROCESS REWARDS """
     if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0 or pending_weight_update:
-        bt.logging.debug(f"Set Weights - Step: {self.step}")
+        bt.logging.debug(f"Set Weights and Process Rewards - Step: {self.step}")
         try:
             if cached_rewards:
+                bt.logging.debug(f"We have cached rewards, using them.")
                 rewards, rewarded_miner_uids = cached_rewards
                 self.update_scores(rewards, rewarded_miner_uids)
                 # Don't clear cached_rewards yet
+            else:
+                bt.logging.debug(f"No cached rewards, fetching new rewards.")
+                rewards, rewarded_miner_uids = get_rewards(self)
+                if len(rewards) > 0:
+                    bt.logging.info(f"Processed rewards for {len(rewarded_miner_uids)} miners.")
+                    self.update_scores(rewards, rewarded_miner_uids)
+                else:
+                    bt.logging.debug(f"No new rewards to process.")
+            
             self.set_weights()
             # Only clear cached_rewards if set_weights() succeeds
             cached_rewards = None
             pending_weight_update = False
         except Exception as e:
-            bt.logging.error(f"Failed to set weights: {e}")
+            bt.logging.error(f"Failed to process rewards or set weights: {e}")
             pending_weight_update = True
-            # Keep cached_rewards for the next attempt
-
-    """ PERIODICALLY CHECK FOR FINISHED MATCHES AND SCORE """
-    if self.step % 100 == 0:  # Adjust this value to change how often you check for finished matches
-        bt.logging.debug(f"Checking for finished matches - Step: {self.step}")
-        rewards, rewarded_miner_uids = get_rewards(self)
-        if len(rewards) > 0:
-            bt.logging.info(f"Processed rewards for {len(rewarded_miner_uids)} miners.")
-            self.update_scores(rewards, rewarded_miner_uids)
-            self.set_weights()
+            if not cached_rewards:  # Only cache rewards if we don't already have cached ones
+                cached_rewards = (rewards, rewarded_miner_uids) if 'rewards' in locals() else None
 
     """ FETCH UPCOMING MATCHES """
     matches = get_matches(self, date_str=current_time, minutes_before_kickoff=MINUTES_BEFORE_KICKOFF)
