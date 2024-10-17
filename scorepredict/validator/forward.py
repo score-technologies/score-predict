@@ -45,10 +45,11 @@ from scorepredict.constants import (
     REWARD_FOR_RESPONSE
 )
 
-self.pending_weight_update = False
-self.cached_rewards: Optional[tuple] = None
+pending_weight_update = False
+cached_rewards: Optional[tuple] = None
 
 async def forward(self):
+    global pending_weight_update, cached_rewards
     """
     The forward function is called by the validator every time step.
     It is responsible for querying the network and scoring the responses.
@@ -81,18 +82,21 @@ async def forward(self):
         send_predictions_to_website(self)
 
     """ PERIODICALLY KEEP VALIDATORS SETTING WEIGHTS """
-    if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0 or self.pending_weight_update:
+    if self.step % VALIDATOR_SET_WEIGHTS_IN_BLOCKS == 0 or pending_weight_update:
         bt.logging.debug(f"Set Weights - Step: {self.step}")
         try:
-            if self.cached_rewards:
-                rewards, rewarded_miner_uids = self.cached_rewards
+            if cached_rewards:
+                rewards, rewarded_miner_uids = cached_rewards
                 self.update_scores(rewards, rewarded_miner_uids)
-                self.cached_rewards = None
+                # Don't clear cached_rewards yet
             self.set_weights()
-            self.pending_weight_update = False
+            # Only clear cached_rewards if set_weights() succeeds
+            cached_rewards = None
+            pending_weight_update = False
         except Exception as e:
             bt.logging.error(f"Failed to set weights: {e}")
-            self.pending_weight_update = True
+            pending_weight_update = True
+            # Keep cached_rewards for the next attempt
 
     """ PERIODICALLY CHECK FOR FINISHED MATCHES AND SCORE """
     if self.step % 100 == 0:  # Adjust this value to change how often you check for finished matches
@@ -225,7 +229,7 @@ async def forward(self):
 
     conn.close()
 
-    if not self.pending_weight_update:
+    if not pending_weight_update:
         additional_rewards_array, additional_rewarded_miner_uids = get_rewards(self)
 
         if len(additional_rewards_array) > 0:
@@ -236,8 +240,8 @@ async def forward(self):
                 self.set_weights()
             except Exception as e:
                 bt.logging.error(f"Failed to update scores or set weights: {e}")
-                self.pending_weight_update = True
-                self.cached_rewards = (additional_rewards_array.tolist(), additional_rewarded_miner_uids)
+                pending_weight_update = True
+                cached_rewards = (additional_rewards_array.tolist(), additional_rewarded_miner_uids)
         else:
             bt.logging.debug(f"No additional rewards to process.")
     else:
