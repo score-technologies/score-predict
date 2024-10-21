@@ -2,10 +2,10 @@
 # CONSTANTS
 
 # How often to send predictions to the app, measured in steps
-APP_SYNC_IN_BLOCKS = 5
+APP_SYNC_IN_BLOCKS = 10
 
 # How often to keep validators setting weights, measured in steps
-VALIDATOR_SET_WEIGHTS_IN_BLOCKS = 150
+VALIDATOR_SET_WEIGHTS_IN_BLOCKS = 300
 
 # Number of minutes before kickoff to fetch upcoming matches
 MINUTES_BEFORE_KICKOFF = 180
