@@ -110,13 +110,13 @@ def get_win_rate_multiplier(win_rate):
     """
     Calculate a multiplier based on the win rate.
     """
-    if win_rate >= 0.7:
+    if win_rate >= 0.6:
         return 1.3  # 30% bonus for excellent performance
-    elif win_rate >= 0.6:
-        return 1.2  # 20% bonus for very good performance
     elif win_rate >= 0.5:
-        return 1.1  # 10% bonus for good performance
+        return 1.2  # 20% bonus for very good performance
     elif win_rate >= 0.4:
+        return 1.1  # 10% bonus for good performance
+    elif win_rate >= 0.3:
         return 1.0  # No bonus for average performance
     else:
         return 0.9  # 10% penalty for below-average performance
