@@ -189,7 +189,16 @@ async def forward(self):
 
             if existing_prediction:
                 bt.logging.debug(f"Prediction already exists for miner {miner_uid} and match {match_id}")
-                active_miner_uids.append(miner_uid)  # Consider them active if they have a prediction
+                active_miner_uids.append(miner_uid)
+                continue
+
+            # Add validation for NULL or invalid predictions
+            if response is None or response.get('predicted_winner') is None:
+                bt.logging.debug(f"Received NULL prediction for miner {miner_uid} and match {match_id}")
+                # Store NULL prediction with a penalty flag
+                c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?, ?)",
+                          (miner_uid, match_id, None, datetime.now(), 0.0, 0, competition))
+                non_responsive_miner_uids.append(miner_uid)
                 continue
 
             # Check scorepredict API

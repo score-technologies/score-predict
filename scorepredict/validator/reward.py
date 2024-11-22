@@ -68,6 +68,9 @@ def reward(prediction, match_data, prediction_time, c, miner_uid):
     """
     Reward the miner response to the match prediction request.
     """
+    # Penalize NULL predictions
+    if prediction is None:
+        return 0.0
     
     actual_winner_code = match_data['score']['winner']
     home_team_name = match_data['homeTeam']['name']
@@ -161,13 +164,18 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
             c.execute("""
                 SELECT miner_uid, 
                        COUNT(*) as total_predictions,
-                       SUM(CASE WHEN reward > 0.5 THEN 1 ELSE 0 END) as wins
+                       SUM(CASE WHEN reward > 0.5 THEN 1 ELSE 0 END) as wins,
+                       SUM(CASE WHEN prediction IS NULL THEN 1 ELSE 0 END) as null_predictions
                 FROM predictions 
                 WHERE timestamp > ?
                 GROUP BY miner_uid
             """, (seven_days_ago,))
             
-            miner_stats = {row[0]: {'predictions': row[1], 'wins': row[2]} for row in c.fetchall()}
+            miner_stats = {row[0]: {
+                'predictions': row[1], 
+                'wins': row[2],
+                'null_predictions': row[3]
+            } for row in c.fetchall()}
             
             if not miner_stats:
                 bt.logging.info("No predictions found in the last 7 days. Returning empty reward tensor and miner UIDs.")
@@ -176,9 +184,16 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
             total_predictions = sum(stats['predictions'] for stats in miner_stats.values())
             avg_predictions = total_predictions / len(miner_stats) if len(miner_stats) > 0 else 0
 
-            # Calculate win rates
-            win_rates = {uid: stats['wins'] / stats['predictions'] if stats['predictions'] > 0 else 0 
-                         for uid, stats in miner_stats.items()}
+            # Penalize miners with high null prediction rates
+            win_rates = {}
+            for uid, stats in miner_stats.items():
+                if stats['predictions'] > 0:
+                    null_rate = stats['null_predictions'] / stats['predictions']
+                    # Apply penalty for high null rates
+                    win_rate = (stats['wins'] / stats['predictions']) * (1.0 - null_rate)
+                    win_rates[uid] = win_rate
+                else:
+                    win_rates[uid] = 0
 
             # Process rewards
             miner_rewards = defaultdict(float)
