@@ -20,10 +20,9 @@
 
 import time
 import os
-import wandb
-import torch
 # Bittensor
 import bittensor as bt
+import numpy as np
 
 # Bittensor Validator Template:
 import scorepredict
@@ -50,7 +49,7 @@ class Validator(BaseValidatorNeuron):
 
         bt.logging.info("load_state()")
         self.load_state()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = 'cpu'
 
                 # Set up simulated time if enabled
         if self.config.simulate_time:
@@ -61,30 +60,7 @@ class Validator(BaseValidatorNeuron):
         else:
             bt.logging.debug(f"Using real time")
 
-        # TODO(developer): Anything specific to your use case you can do here
         
-        #netrc_path = pathlib.Path.home() / ".netrc"
-        #wandb_api_key = os.getenv("WANDB_API_KEY")
-        #if wandb_api_key is not None:
-        #    bt.logging.info("WANDB_API_KEY is set")
-        #bt.logging.info("~/.netrc exists:", netrc_path.exists())
-
-        #if wandb_api_key is None :
-        #    bt.logging.warning(
-        #        "WANDB_API_KEY not found in environment variables."
-        #    )
-        
-        # wandb.init(
-        #         project=f"sn{self.config.netuid}-validators",
-        #         entity="score",
-        #         config={
-        #             "hotkey": self.wallet.hotkey.ss58_address,
-        #         },
-        #         name=f"validator-{self.uid}-{__version__}",
-        #         resume="auto",
-        #         dir=self.config.neuron.full_path,
-        #         reinit=True,
-        # )
 
     async def forward(self):
         """

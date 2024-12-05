@@ -22,7 +22,7 @@ import bittensor as bt
 import numpy as np
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Any, Union
 from collections import defaultdict
 
 from scorepredict.utils.utils import get_matches
@@ -235,8 +235,10 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
             bt.logging.debug(f"Total rewards: {total_rewards}, Rewarded miner UIDs: {rewarded_miner_uids}")
 
             if total_rewards > 0:
-                normalized_rewards = [reward / total_rewards for reward in final_rewards]
-                rewards_tensor = torch.FloatTensor(normalized_rewards).to(self.device)
+                # Convert to numpy array for better numerical stability
+                final_rewards_array = np.array(final_rewards, dtype=np.float64)
+                normalized_rewards = final_rewards_array / total_rewards
+                rewards_tensor = torch.FloatTensor(normalized_rewards.tolist()).to(self.device)
                 bt.logging.debug(f"Rewards tensor: {rewards_tensor}")
                 bt.logging.info(f"Processed rewards for {len(rewarded_miner_uids)} miners.")
                 return rewards_tensor, rewarded_miner_uids
@@ -248,5 +250,5 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
         bt.logging.error(f"Database error: {e}")
         return torch.FloatTensor([]), []
     except Exception as e:
-        bt.logging.error(f"Unexpected error in get_rewards: {e}")
+        bt.logging.error(f"Error in get_rewards: {e}")
         return torch.FloatTensor([]), []

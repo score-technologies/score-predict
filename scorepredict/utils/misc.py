@@ -20,9 +20,13 @@ import time
 import math
 import hashlib as rpccheckhealth
 from math import floor
-from typing import Callable, Any
+from typing import Callable, Any, Optional
 from functools import lru_cache, update_wrapper
+import threading
+import websockets.exceptions
 
+# Global lock for websocket operations
+_websocket_lock = threading.Lock()
 
 # LRU Cache with TTL
 def ttl_cache(maxsize: int = 128, typed: bool = False, ttl: int = -1):
@@ -89,24 +93,45 @@ def _ttl_hash_gen(seconds: int):
         yield floor((time.time() - start_time) / seconds)
 
 
+def _safe_get_block(self) -> Optional[int]:
+    """Helper function to safely get the current block number."""
+    try:
+        return self.subtensor.get_current_block()
+    except (websockets.exceptions.ConcurrencyError, websockets.exceptions.ConnectionClosedError):
+        # Return None if we can't get the block during shutdown
+        return None
+    except Exception as e:
+        # For other exceptions, wait briefly and retry once
+        time.sleep(0.5)
+        try:
+            return self.subtensor.get_current_block()
+        except Exception:
+            return None
+
+
 # 12 seconds updating block.
 @ttl_cache(maxsize=1, ttl=12)
 def ttl_get_block(self) -> int:
     """
     Retrieves the current block number from the blockchain. This method is cached with a time-to-live (TTL)
-    of 12 seconds, meaning that it will only refresh the block number from the blockchain at most every 12 seconds,
-    reducing the number of calls to the underlying blockchain interface.
+    of 12 seconds, meaning that it will only refresh the block number from the blockchain at most every 12 seconds.
 
     Returns:
-        int: The current block number on the blockchain.
+        int: The current block number on the blockchain, or the last known block number if there's an error.
 
-    This method is useful for applications that need to access the current block number frequently and can
-    tolerate a delay of up to 12 seconds for the latest information. By using a cache with TTL, the method
-    efficiently reduces the workload on the blockchain interface.
-
-    Example:
-        current_block = ttl_get_block(self)
-
-    Note: self here is the miner or validator instance
+    Note: This method is thread-safe and will handle websocket errors gracefully during shutdown.
     """
-    return self.subtensor.get_current_block()
+    with _websocket_lock:
+        # Try to get the block number
+        block = _safe_get_block(self)
+        
+        if block is not None:
+            return block
+            
+        # If we can't get the block number (e.g., during shutdown),
+        # try to get the last known block from the metagraph
+        try:
+            return self.metagraph.block
+        except Exception:
+            # If all else fails, return a reasonable default
+            return 0
