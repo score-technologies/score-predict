@@ -17,12 +17,11 @@
 # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-import torch
 import bittensor as bt
 import numpy as np
 import sqlite3
 from datetime import datetime, timedelta
-from typing import Tuple, List, Dict, Any, Union
+from typing import Tuple, List
 from collections import defaultdict
 
 from scorepredict.utils.utils import get_matches
@@ -121,7 +120,7 @@ def get_win_rate_multiplier(win_rate):
     else:
         return 0.9  # 10% penalty for below-average performance
 
-def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
+def get_rewards(self) -> Tuple[np.ndarray, List[int]]:
     bt.logging.debug("Entering get_rewards function")
     
     current_date = get_current_time(self)
@@ -142,8 +141,8 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
         finished_matches = finished_matches_two_days_ago
 
     if not finished_matches:
-        bt.logging.info("No finished matches found for the past 48 hours. Returning empty reward tensor and miner UIDs.")
-        return torch.FloatTensor([]), []
+        bt.logging.info("No finished matches found for the past 48 hours. Returning empty reward array and miner UIDs.")
+        return np.array([], dtype=np.float64), []
 
     db_name = f'predictions-{self.uid}.db'
     
@@ -170,8 +169,8 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
             miner_stats = {row[0]: {'predictions': row[1], 'wins': row[2]} for row in c.fetchall()}
             
             if not miner_stats:
-                bt.logging.info("No predictions found in the last 7 days. Returning empty reward tensor and miner UIDs.")
-                return torch.FloatTensor([]), []
+                bt.logging.info("No predictions found in the last 7 days. Returning empty reward array and miner UIDs.")
+                return np.array([], dtype=np.float64), []
 
             total_predictions = sum(stats['predictions'] for stats in miner_stats.values())
             avg_predictions = total_predictions / len(miner_stats) if len(miner_stats) > 0 else 0
@@ -235,20 +234,20 @@ def get_rewards(self) -> Tuple[torch.FloatTensor, List[int]]:
             bt.logging.debug(f"Total rewards: {total_rewards}, Rewarded miner UIDs: {rewarded_miner_uids}")
 
             if total_rewards > 0:
-                # Convert to numpy array for better numerical stability
-                final_rewards_array = np.array(final_rewards, dtype=np.float64)
-                normalized_rewards = final_rewards_array / total_rewards
-                rewards_tensor = torch.FloatTensor(normalized_rewards.tolist()).to(self.device)
-                bt.logging.debug(f"Rewards tensor: {rewards_tensor}")
+                # Convert to numpy array and normalize
+                rewards_array = np.array(final_rewards, dtype=np.float64)
+                normalized_rewards = rewards_array / total_rewards
+                
+                bt.logging.debug(f"Rewards array: {normalized_rewards}")
                 bt.logging.info(f"Processed rewards for {len(rewarded_miner_uids)} miners.")
-                return rewards_tensor, rewarded_miner_uids
+                return normalized_rewards, rewarded_miner_uids
             else:
                 bt.logging.info("No rewards to process or all rewards are zero.")
-                return torch.FloatTensor([]), []
+                return np.array([], dtype=np.float64), []
 
     except sqlite3.Error as e:
         bt.logging.error(f"Database error: {e}")
-        return torch.FloatTensor([]), []
+        return np.array([], dtype=np.float64), []
     except Exception as e:
         bt.logging.error(f"Error in get_rewards: {e}")
-        return torch.FloatTensor([]), []
+        return np.array([], dtype=np.float64), []

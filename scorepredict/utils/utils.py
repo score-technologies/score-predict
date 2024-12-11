@@ -19,7 +19,6 @@
 import os
 import math
 import time
-import torch
 import functools
 import numpy as np
 import random as pyrandom
@@ -27,7 +26,7 @@ import sqlite3
 
 from Crypto.Random import random
 from itertools import combinations, cycle
-from typing import List, Union
+from typing import List, Union, Dict, Any
 
 import bittensor as bt
 import datetime
@@ -219,11 +218,14 @@ def get_available_uids(self, exclude: list = None):
     """Returns all available uids from the metagraph.
 
     Returns:
-        uids (torch.LongTensor): All available uids.
+        list: All available uids.
     """
     avail_uids = []
 
-    for uid in range(self.metagraph.n.item()):
+    # Convert metagraph.n to int if it's a tensor/array
+    n = int(self.metagraph.n) if hasattr(self.metagraph.n, 'item') else self.metagraph.n
+
+    for uid in range(n):
         uid_is_available = check_uid_availability(
             self.metagraph, uid, self.config.neuron.vpermit_tao_limit
         )
@@ -235,20 +237,24 @@ def get_available_uids(self, exclude: list = None):
 
 def get_random_uids(
     self, k: int, exclude: List[int] = None, seed: int = None
-) -> torch.LongTensor:
+) -> List[int]:
     """Returns k available random uids from the metagraph.
     Args:
         k (int): Number of uids to return.
         exclude (List[int]): List of uids to exclude from the random sampling.
+        seed (int, optional): Random seed for reproducibility.
     Returns:
-        uids (torch.LongTensor): Randomly sampled available uids.
+        list: Randomly sampled available uids.
     Notes:
         If `k` is larger than the number of available `uids`, set `k` to the number of available `uids`.
     """
     candidate_uids = []
     avail_uids = []
 
-    for uid in range(self.metagraph.n.item()):
+    # Convert metagraph.n to int if it's a tensor/array
+    n = int(self.metagraph.n) if hasattr(self.metagraph.n, 'item') else self.metagraph.n
+
+    for uid in range(n):
         uid_is_available = check_uid_availability(
             self.metagraph, uid, self.config.neuron.vpermit_tao_limit
         )
@@ -258,15 +264,6 @@ def get_random_uids(
             candidate_uids.append(uid)
         elif uid_is_available:
             avail_uids.append(uid)
-
-    # If not enough candidate_uids, supplement from avail_uids, ensuring they're not in exclude list
-    if len(candidate_uids) < k:
-        additional_uids_needed = k - len(candidate_uids)
-        filtered_avail_uids = [uid for uid in avail_uids if uid not in exclude]
-        additional_uids = random.sample(
-            filtered_avail_uids, min(additional_uids_needed, len(filtered_avail_uids))
-        )
-        candidate_uids.extend(additional_uids)
 
     # Safeguard against trying to sample more than what is available
     num_to_sample = min(k, len(candidate_uids))
@@ -305,26 +302,23 @@ def get_validators_and_shares(self, vpermit_tao_limit: int, vtrust_threshold: fl
     Returns:
         Dict[int, float]: A dictionary mapping each validator's UID to their share of the total stake.
     """
-    # Ensure vpermits is a torch.Tensor
-    vpermits = torch.tensor(self.metagraph.validator_permit)
-    vpermit_uids = torch.where(vpermits)[0]
+    # Convert to numpy arrays
+    vpermits = np.array(self.metagraph.validator_permit)
+    vpermit_uids = np.nonzero(vpermits)[0]
     
-    # Convert S and validator_trust to torch.Tensor
-    S_tensor = torch.tensor(self.metagraph.S)
-    vtrust_tensor = torch.tensor(self.metagraph.validator_trust)
+    # Convert S and validator_trust to numpy arrays
+    S_array = np.array(self.metagraph.S)
+    vtrust_array = np.array(self.metagraph.validator_trust)
     
     # Filter UIDs based on stake and vtrust
-    query_idxs = torch.where(
-        (S_tensor[vpermit_uids] > vpermit_tao_limit) &
-        (vtrust_tensor[vpermit_uids] >= vtrust_threshold)
-    )[0]
-    validator_uids = vpermit_uids[query_idxs].tolist()
+    query_mask = (S_array[vpermit_uids] > vpermit_tao_limit) & (vtrust_array[vpermit_uids] >= vtrust_threshold)
+    validator_uids = vpermit_uids[query_mask].tolist()
     
     # Calculate total stake of selected validators
-    total_stake = sum(S_tensor[validator_uids].tolist())
+    total_stake = S_array[validator_uids].sum()
     
     # Calculate each validator's share
-    validator_shares = {uid: (S_tensor[uid] / total_stake).item() for uid in validator_uids}
+    validator_shares = {uid: (S_array[uid] / total_stake).item() for uid in validator_uids}
 
     bt.logging.info(f"Validator UIDs: {validator_uids}")
     bt.logging.info(f"Total stake: {total_stake}")
@@ -487,26 +481,23 @@ def get_all_validators_vtrust(
     return_hotkeys: bool = False,
 ):
     """
-    Retrieves the hotkeys of all validators in the network. This method is used to
-    identify the validators and their corresponding hotkeys, which are essential
-    for various network operations, including blacklisting and peer validation.
+    Retrieves the hotkeys of all validators in the network.
     Qualifications for validator peers:
-        - stake > threshold (e.g. 500, may vary per subnet)
+        - stake > threshold
         - validator permit (implied with vtrust score)
-        - validator trust score > threshold (e.g. 0.5)
+        - validator trust score > threshold
     Returns:
         List[str]: A list of hotkeys corresponding to all the validators in the network.
     """
-    vtrusted_uids = [
-        uid for uid in torch.where(self.metagraph.validator_trust > vtrust_threshold)[0]
-    ]
-    stake_uids = [
-        uid for uid in vtrusted_uids if self.metagraph.S[uid] > vpermit_tao_limit
-    ]
+    vtrust_array = np.array(self.metagraph.validator_trust)
+    vtrusted_uids = np.nonzero(vtrust_array > vtrust_threshold)[0]
+    S_array = np.array(self.metagraph.S)
+    stake_uids = vtrusted_uids[S_array[vtrusted_uids] > vpermit_tao_limit]
+    
     return (
         [self.metagraph.hotkeys[uid] for uid in stake_uids]
         if return_hotkeys
-        else stake_uids
+        else stake_uids.tolist()
     )
 
 
@@ -519,17 +510,15 @@ def get_all_validators(self, return_hotkeys=False):
     Returns:
         list: A list of validator UIDs or hotkeys, depending on the value of return_hotkeys.
     """
-    # Ensure vpermits is a torch.Tensor
-    vpermits = torch.tensor(self.metagraph.validator_permit)  # Convert to PyTorch tensor if not already
-    vpermit_uids = torch.where(vpermits)[0]
+    # Convert to numpy arrays
+    vpermits = np.array(self.metagraph.validator_permit)
+    vpermit_uids = np.nonzero(vpermits)[0]
     
-    # Convert self.metagraph.S to a torch.Tensor
-    S_tensor = torch.tensor(self.metagraph.S)
+    # Convert S to numpy array
+    S_array = np.array(self.metagraph.S)
     
-    query_idxs = torch.where(
-        S_tensor[vpermit_uids] > self.config.neuron.vpermit_tao_limit
-    )[0]
-    query_uids = vpermit_uids[query_idxs].tolist()
+    query_mask = S_array[vpermit_uids] > self.config.neuron.vpermit_tao_limit
+    query_uids = vpermit_uids[query_mask].tolist()
 
     return (
         [self.metagraph.hotkeys[uid] for uid in query_uids]
@@ -546,12 +535,8 @@ def get_all_miners(self):
     """
     # Determine miner axons to query from metagraph
     vuids = get_all_validators(self)
-    return [uid for uid in self.metagraph.uids.tolist() 
+    return [uid for uid in range(len(self.metagraph.uids)) 
             if uid not in vuids and self.metagraph.axons[uid].ip != '0.0.0.0']
-            #Remove those that are not connected
-
-
-
 
 def get_query_miners(self, k=20, exlucde=None):
     """
@@ -569,20 +554,18 @@ def get_query_miners(self, k=20, exlucde=None):
         muids = [muid for muid in muids if muid not in exlucde]
     return get_pseudorandom_uids(self, muids, k=k)
 
-
 def get_query_validators(self, k=3):
     """
     Obtain a list of available validator UIDs selected pseudorandomly based on the current block hash.
 
     Args:
-        k (int): The number of available miner UIDs to retreive.
+        k (int): The number of available miner UIDs to retrieve.
 
     Returns:
         list: A list of pseudorandomly selected available validator UIDs
     """
     vuids = get_all_validators(self)
     return get_pseudorandom_uids(self, uids=vuids, k=k)
-
 
 async def get_available_query_miners(
     self, k, exclude: List[int] = None, exclude_full: bool = False
@@ -607,7 +590,6 @@ async def get_available_query_miners(
         bt.logging.debug(f"available uids nonfull: {muids_nonfull}")
     return get_pseudorandom_uids(self, muids, k=k)
 
-
 def get_current_validator_uid_pseudorandom(self):
     """
     Retrieve a single validator UID selected pseudorandomly based on the current block hash.
@@ -620,7 +602,6 @@ def get_current_validator_uid_pseudorandom(self):
     vuids = get_query_validators(self)
     return pyrandom.choice(vuids)
 
-
 def get_current_validtor_uid_round_robin(self):
     """
     Retrieve a validator UID using a round-robin selection based on the current block and epoch length.
@@ -631,7 +612,6 @@ def get_current_validtor_uid_round_robin(self):
     vuids = get_all_validators(self)
     vidx = self.subtensor.get_current_block() // 100 % len(vuids)
     return vuids[vidx]
-
 
 def generate_efficient_combinations(available_uids, R):
     """
@@ -647,7 +627,6 @@ def generate_efficient_combinations(available_uids, R):
     Raises:
         ValueError: If the redundancy factor is greater than the number of available UIDs.
     """
-
     if R > len(available_uids):
         raise ValueError(
             "Redundancy factor cannot be greater than the number of available UIDs."
@@ -655,9 +634,7 @@ def generate_efficient_combinations(available_uids, R):
 
     # Generate all combinations of available UIDs for the redundancy factor
     uid_combinations = list(combinations(available_uids, R))
-
     return uid_combinations
-
 
 def assign_combinations_to_hashes_by_block_hash(self, hashes, combinations):
     """
@@ -674,7 +651,6 @@ def assign_combinations_to_hashes_by_block_hash(self, hashes, combinations):
     Raises:
         ValueError: If there are not enough unique UID combinations for the number of data chunk hashes.
     """
-
     if len(hashes) > len(combinations):
         raise ValueError(
             "Not enough unique UID combinations for the given redundancy factor and number of hashes."
@@ -685,7 +661,6 @@ def assign_combinations_to_hashes_by_block_hash(self, hashes, combinations):
     # Shuffle once and then iterate in order for assignment
     pyrandom.shuffle(combinations)
     return {hash_val: combinations[i] for i, hash_val in enumerate(hashes)}
-
 
 def assign_combinations_to_hashes(hashes, combinations):
     """
@@ -701,7 +676,6 @@ def assign_combinations_to_hashes(hashes, combinations):
     Raises:
         ValueError: If there are not enough unique UID combinations for the number of data chunk hashes.
     """
-
     if len(hashes) > len(combinations):
         raise ValueError(
             "Not enough unique UID combinations for the given redundancy factor and number of hashes."
