@@ -182,51 +182,22 @@ async def forward(self):
         non_responsive_miner_uids = []
 
         for miner_uid, response in zip(miner_uids, responses):
-            # Check if prediction already exists in the database
-            c.execute("SELECT * FROM predictions WHERE miner_uid=? AND match_id=?", (miner_uid, match_id))
-            existing_prediction = c.fetchone()
-
-            if existing_prediction:
-                bt.logging.debug(f"Prediction already exists for miner {miner_uid} and match {match_id}")
-                active_miner_uids.append(miner_uid)  # Consider them active if they have a prediction
-                continue
-
-            # Check scorepredict API
-            api_url = f"{SCORE_PREDICT_API_URL}/api/predictions/{match_id}?userId={miner_uid}"
-            try:
-                api_response = requests.get(api_url)
-                if api_response.status_code == 200:
-                    api_prediction = api_response.json().get('prediction', {})
-                    if api_prediction:
-                        predicted_winner = api_prediction.get('prediction')
-                        sent_website = 1
-                    else:
-                        predicted_winner = response.get('predicted_winner')
-                        sent_website = 0
-                else:
-                    predicted_winner = response.get('predicted_winner')
-                    sent_website = 0
-            except requests.RequestException as e:
-                bt.logging.error(f"Error checking API for prediction: {e}")
-                predicted_winner = response.get('predicted_winner')
-                sent_website = 0
-
+            predicted_winner = response.get('predicted_winner')
+            
             if predicted_winner is None:
                 bt.logging.debug(f"Received NULL prediction for miner {miner_uid} and match {match_id}")
                 non_responsive_miner_uids.append(miner_uid)
                 continue
 
-            c.execute("INSERT INTO predictions VALUES (?, ?, ?, ?, ?, ?, ?)",
-                      (miner_uid, match_id, predicted_winner, datetime.now(), None, sent_website, competition))
+            # Save or update the prediction
+            c.execute("""INSERT OR REPLACE INTO predictions 
+                        (miner_uid, match_id, prediction, timestamp, reward, sentWebsite, competition)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                     (miner_uid, match_id, predicted_winner, datetime.now(), None, 0, competition))
             
             active_miner_uids.append(miner_uid)
             
-        conn.commit()
-        # Penalize only non-responsive miners
-        # no_rewards = [0.0 for _ in non_responsive_miner_uids]
-        # if non_responsive_miner_uids:
-        #     bt.logging.info(f"Penalizing miners {non_responsive_miner_uids} that did not respond or returned NULL.")
-        #     self.update_scores(torch.FloatTensor(no_rewards).to(self.device), non_responsive_miner_uids)
+            conn.commit()
 
     conn.close()
 
